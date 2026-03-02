@@ -28,13 +28,16 @@ _ICON_FILES = {
 }
 
 
+_WIN_ICON_SIZE = (64, 64)
+
 def _load_icon(state):
     path = _ICON_FILES.get(state, _ICON_FILES["stopped"])
     if os.path.exists(path):
-        return Image.open(path)
-    # 回退：生成纯色 16x16 图标
+        img = Image.open(path).resize(_WIN_ICON_SIZE, Image.LANCZOS)
+        return img
+    # 回退：生成纯色图标
     color = {"good": "green", "bad": "red"}.get(state, "gray")
-    img = Image.new("RGB", (16, 16), color)
+    img = Image.new("RGB", _WIN_ICON_SIZE, color)
     return img
 
 
