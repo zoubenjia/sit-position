@@ -6,7 +6,7 @@ PYTHON="$PROJECT_DIR/.venv/bin/python"
 SCRIPT="$PROJECT_DIR/sit_monitor.py"
 LOG_DIR="$PROJECT_DIR/logs"
 SESSION="sit-monitor"
-SHELL_RC="$HOME/.zshrc"
+SHELL_RC="$HOME/.bashrc"
 MARKER="# sit-monitor auto-start"
 
 usage() {
