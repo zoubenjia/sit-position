@@ -185,13 +185,13 @@ def evaluate_posture(landmarks, thresholds):
         tilt = abs(st) if st <= 90 else abs(180 - st)
         details["shoulder"] = tilt
         if tilt > thresholds["shoulder"]:
-            reasons.append(f"肩膀倾斜 {tilt:.1f}°")
+            reasons.append(f"肩膀歪了，摆正肩膀 ({tilt:.1f}°)")
 
     if hf is not None and hf > thresholds["neck"]:
-        reasons.append(f"头部前倾 {hf:.1f}°")
+        reasons.append(f"头太靠前，往后收下巴 ({hf:.1f}°)")
 
     if tf is not None and tf > thresholds["torso"]:
-        reasons.append(f"躯干前倾 {tf:.1f}°")
+        reasons.append(f"身体前倾，坐直挺胸 ({tf:.1f}°)")
 
     return len(reasons) > 0, details, reasons
 
