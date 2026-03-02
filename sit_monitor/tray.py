@@ -74,6 +74,10 @@ class TrayApp(rumps.App):
                 rumps.MenuItem("  Torso +1", callback=lambda _: self._adjust("torso_threshold", 1)),
                 rumps.MenuItem("  Torso -1", callback=lambda _: self._adjust("torso_threshold", -1)),
                 None,
+                rumps.MenuItem(f"Bad Seconds: {s.bad_seconds}s", callback=None),
+                rumps.MenuItem("  Bad Seconds +5", callback=lambda _: self._adjust("bad_seconds", 5)),
+                rumps.MenuItem("  Bad Seconds -5", callback=lambda _: self._adjust("bad_seconds", -5)),
+                None,
                 rumps.MenuItem(
                     f"{'☑' if s.sound else '☐'} Sound",
                     callback=self._toggle_sound,
@@ -269,11 +273,18 @@ class TrayApp(rumps.App):
     def _adjust(self, attr, delta):
         val = getattr(self.settings, attr)
         new_val = max(1.0, val + delta)
-        setattr(self.settings, attr, round(new_val, 1))
+        if isinstance(val, int):
+            new_val = int(new_val)
+        else:
+            new_val = round(new_val, 1)
+        setattr(self.settings, attr, new_val)
         self.settings.save()
-        name = attr.replace("_threshold", "").capitalize()
+        if attr == "bad_seconds":
+            name, unit = "Bad Seconds", "s"
+        else:
+            name, unit = attr.replace("_threshold", "").capitalize(), "°"
         try:
-            self.menu["Settings"][f"{name}: {val}°"].title = f"{name}: {new_val}°"
+            self.menu["Settings"][f"{name}: {val}{unit}"].title = f"{name}: {new_val}{unit}"
         except Exception:
             pass
 

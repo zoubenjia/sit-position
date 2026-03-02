@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import subprocess
 import time
 from datetime import datetime
 
@@ -14,6 +13,7 @@ from sit_monitor.posture import evaluate_posture
 from sit_monitor.stats import Stats
 from sit_monitor.debug import draw_debug
 from sit_monitor.platform import send_notification, media_play_pause
+from sit_monitor.tts import speak
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
@@ -240,10 +240,7 @@ class PostureMonitor:
                     else:
                         # bad→good 正向反馈
                         if bad_start_time is not None and s.sound:
-                            subprocess.Popen(
-                                ["say", "-v", "Tingting", "坐姿很好，继续保持"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            )
+                            speak("坐姿很好，继续保持")
                         bad_start_time = None
                         status_line = (
                             f"✓ 姿势良好 | 就坐 {sit_minutes:.0f}min | "

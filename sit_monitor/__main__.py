@@ -39,7 +39,13 @@ def _run_posture(args):
     settings.apply_args(args)
 
     if args.tray:
-        from sit_monitor.tray import TrayApp
+        if sys.platform == "darwin":
+            from sit_monitor.tray import TrayApp
+        elif sys.platform == "win32":
+            from sit_monitor.tray_win import TrayApp
+        else:
+            print(f"错误: 不支持的平台 {sys.platform}")
+            sys.exit(1)
         app = TrayApp(settings, debug=args.debug)
         app.run()
     else:
@@ -57,7 +63,8 @@ def _run_posture(args):
             monitor.stop()
 
         signal.signal(signal.SIGINT, on_signal)
-        signal.signal(signal.SIGTERM, on_signal)
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, on_signal)
 
         monitor.run()
 
@@ -94,7 +101,8 @@ def _run_exercise(args):
         monitor.stop()
 
     signal.signal(signal.SIGINT, on_signal)
-    signal.signal(signal.SIGTERM, on_signal)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, on_signal)
 
     monitor.run()
 

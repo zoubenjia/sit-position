@@ -10,9 +10,9 @@ echo ""
 
 # --- 系统检查 ---
 
-# macOS 检查
+# macOS 检查（此脚本适用于 macOS，Windows 请使用 setup.ps1）
 if [[ "$(uname)" != "Darwin" ]]; then
-    echo "错误: 此程序仅支持 macOS"
+    echo "错误: 此脚本仅支持 macOS，Windows 用户请运行 setup.ps1"
     exit 1
 fi
 

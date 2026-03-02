@@ -2,8 +2,11 @@
 
 import heapq
 import subprocess
+import sys
 import threading
 import time
+
+from sit_monitor.tts import speak
 
 
 class VoiceCoach:
@@ -107,14 +110,15 @@ class VoiceCoach:
 
                 # 播放语音
                 try:
-                    proc = subprocess.Popen(
-                        ["say", "-v", "Tingting", text],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    self._current_proc = proc
-                    proc.wait()
-                    self._current_proc = None
+                    proc = speak(text, blocking=False)
+                    if proc is not None:
+                        # macOS: 返回 Popen，可被 terminate 打断
+                        self._current_proc = proc
+                        proc.wait()
+                        self._current_proc = None
+                    else:
+                        # Windows: pyttsx3 阻塞播放，已在 speak() 内完成
+                        pass
                 except Exception:
                     self._current_proc = None
 
