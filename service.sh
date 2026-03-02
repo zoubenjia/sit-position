@@ -10,7 +10,7 @@ SHELL_RC="$HOME/.zshrc"
 MARKER="# sit-monitor auto-start"
 
 usage() {
-    echo "用法: $0 {install|uninstall|start|stop|restart|status|log}"
+    echo "用法: $0 {install|uninstall|start|stop|restart|status|log|update}"
     echo ""
     echo "  install   安装自启动（iTerm2 打开时自动启动）"
     echo "  uninstall 卸载自启动"
@@ -19,6 +19,7 @@ usage() {
     echo "  restart   重启"
     echo "  status    查看状态"
     echo "  log       查看实时日志"
+    echo "  update    从 GitHub 拉取最新代码并重启"
     exit 1
 }
 
@@ -94,6 +95,45 @@ do_log() {
     tail -f "$LOG_DIR/sit-monitor.log" 2>/dev/null
 }
 
+do_update() {
+    cd "$PROJECT_DIR"
+
+    echo "检查更新..."
+    git fetch origin 2>/dev/null
+
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "")
+
+    if [ -z "$REMOTE" ]; then
+        echo "错误: 无法获取远程版本"
+        exit 1
+    fi
+
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo "已是最新版本"
+        return
+    fi
+
+    echo "发现新版本，更新中..."
+    git pull origin main
+
+    # 检查依赖是否有变化
+    if git diff "$LOCAL" "$REMOTE" --name-only | grep -q "requirements.txt"; then
+        echo "依赖有变化，重新安装..."
+        uv pip install --python "$PYTHON" -r requirements.txt
+    fi
+
+    # 如果正在运行，自动重启
+    if tmux has-session -t $SESSION 2>/dev/null; then
+        echo "重启服务..."
+        do_stop
+        sleep 1
+        do_start
+    fi
+
+    echo "更新完成: $(git log --oneline -1)"
+}
+
 case "${1:-}" in
     install)   do_install ;;
     uninstall) do_uninstall ;;
@@ -102,5 +142,6 @@ case "${1:-}" in
     restart)   do_stop 2>/dev/null; sleep 1; do_start ;;
     status)    do_status ;;
     log)       do_log ;;
+    update)    do_update ;;
     *)         usage ;;
 esac
