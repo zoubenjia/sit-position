@@ -9,6 +9,7 @@ from datetime import datetime
 import cv2
 import mediapipe as mp
 
+from sit_monitor.i18n import t
 from sit_monitor.posture import evaluate_posture
 from sit_monitor.stats import Stats
 from sit_monitor.debug import draw_debug
@@ -141,10 +142,10 @@ class PostureMonitor:
                         cap.release()
                         cap = None
                         self._notify_state("camera_wait")
-                        print(f"\r{'⏳ 摄像头被占用，等待释放...':<80}", end="", flush=True)
+                        print(f"\r{t('core.camera_wait'):<80}", end="", flush=True)
                         time.sleep(camera_retry_interval)
                         continue
-                    print(f"\r{'📷 摄像头已连接，开始监控...':<80}", end="", flush=True)
+                    print(f"\r{t('core.camera_connected'):<80}", end="", flush=True)
 
                 # 坏姿势时缩短检测间隔
                 interval = 2.0 if bad_start_time is not None else s.interval
@@ -210,13 +211,13 @@ class PostureMonitor:
                             if media_play_pause(s.browser or None):
                                 media_paused = True
                         if media_paused:
-                            status_line = f"⏸ 已暂停播放（离开 {away_duration:.0f}s）"
+                            status_line = t("core.media_paused", seconds=away_duration)
                         else:
-                            status_line = f"未检测到人体 ({away_duration:.0f}s)"
+                            status_line = t("core.no_person_away", seconds=away_duration)
                     else:
                         if away_start_time is None:
                             away_start_time = now
-                        status_line = "未检测到人体"
+                        status_line = t("core.no_person")
 
                     self._notify_state("away")
                 else:
@@ -241,8 +242,8 @@ class PostureMonitor:
                     snoozed = now < self.snooze_until
                     if not snoozed and (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
                         _say_proc = send_notification(
-                            "久坐提醒",
-                            f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下、喝杯水吧！",
+                            t("core.sit_alert_title"),
+                            t("core.sit_alert_msg", minutes=sit_minutes),
                             sound=s.sound,
                             use_notification_center=use_nc,
                         )
@@ -264,11 +265,11 @@ class PostureMonitor:
                             # 疲劳提醒
                             if fatigue_level != "normal" and not snoozed and (now - last_fatigue_notify_time) >= s.fatigue_cooldown:
                                 if fatigue_level == "very_tired":
-                                    fatigue_msg = "你看起来非常疲劳，建议立即休息！"
+                                    fatigue_msg = t("core.fatigue_very_tired")
                                 else:
-                                    fatigue_msg = "检测到疲劳迹象（眨眼频率高/打哈欠），注意休息"
+                                    fatigue_msg = t("core.fatigue_tired")
                                 _say_proc = send_notification(
-                                    "疲劳提醒",
+                                    t("core.fatigue_alert_title"),
                                     fatigue_msg,
                                     sound=s.sound,
                                     use_notification_center=use_nc,
@@ -306,10 +307,10 @@ class PostureMonitor:
                         if not snoozed and bad_duration >= s.bad_seconds and (now - last_notify_time) >= s.cooldown:
                             msg = "、".join(reasons)
                             if sit_minutes >= s.sit_max_minutes:
-                                msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来活动、喝杯水）"
+                                msg += t("core.sit_reminder_suffix", minutes=sit_minutes)
                             _say_proc = send_notification(
-                                "坐姿提醒",
-                                f"请纠正姿势：{msg}",
+                                t("core.posture_alert_title"),
+                                t("core.posture_alert_msg", msg=msg),
                                 sound=s.sound,
                                 use_notification_center=use_nc,
                             )
@@ -320,7 +321,7 @@ class PostureMonitor:
                             bad_start_time = now
 
                         status_line = (
-                            f"⚠ 坏姿势 {bad_duration:.0f}s | 就坐 {sit_minutes:.0f}min | "
+                            t("core.bad_posture_status", duration=bad_duration, minutes=sit_minutes)
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
                     else:
@@ -328,10 +329,10 @@ class PostureMonitor:
                         if good_streak >= GOOD_STREAK_REQUIRED and bad_start_time is not None:
                             # 真正恢复了，播报正向反馈（仅在坏姿势已触发过提醒后）
                             if s.sound and (now - bad_start_time) >= s.bad_seconds:
-                                speak("坐姿很好，继续保持")
+                                speak(t("core.good_posture_tts"))
                             bad_start_time = None
                         status_line = (
-                            f"✓ 姿势良好 | 就坐 {sit_minutes:.0f}min | "
+                            t("core.good_posture_status", minutes=sit_minutes)
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
 
@@ -372,7 +373,7 @@ class PostureMonitor:
                       sit_notifications=self.stats.sit_notifications_sent)
 
             print("\n\n" + "=" * 40)
-            print("📊 本次坐姿监控统计")
+            print(t("core.session_summary_title"))
             print("=" * 40)
             print(summary)
             print("=" * 40)
@@ -384,5 +385,5 @@ class PostureMonitor:
                 cap.release()
             if self.debug:
                 cv2.destroyAllWindows()
-            print("已退出。")
+            print(t("core.exited"))
             self._notify_state("stopped")

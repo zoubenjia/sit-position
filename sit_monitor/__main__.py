@@ -5,6 +5,8 @@ import os
 import signal
 import sys
 
+from sit_monitor.i18n import t
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="坐姿监控 & 运动指导")
@@ -45,7 +47,7 @@ def _run_posture(args):
         elif sys.platform == "win32":
             from sit_monitor.tray_win import TrayApp
         else:
-            print(f"错误: 不支持的平台 {sys.platform}")
+            print(t("main.unsupported_platform", platform=sys.platform))
             sys.exit(1)
         app = TrayApp(settings, debug=args.debug)
         app.run()
@@ -54,8 +56,8 @@ def _run_posture(args):
         monitor = PostureMonitor(settings, debug=args.debug)
 
         if not monitor.check_model():
-            print("错误: 未找到模型文件")
-            print("请运行 bash setup.sh 或手动下载:")
+            print(t("main.model_not_found"))
+            print(t("main.model_download_hint"))
             print("  curl -sSL -o pose_landmarker_lite.task \\")
             print("    https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task")
             sys.exit(1)
@@ -76,7 +78,7 @@ def _run_exercise(args):
 
     analyzer_cls = EXERCISE_REGISTRY.get(args.mode)
     if analyzer_cls is None:
-        print(f"错误: 未知运动模式 '{args.mode}'")
+        print(t("main.unknown_exercise", mode=args.mode))
         sys.exit(1)
 
     # 传递可配置的阈值
@@ -92,8 +94,8 @@ def _run_exercise(args):
     monitor = ExerciseMonitor(analyzer, camera=args.camera, debug=args.debug)
 
     if not monitor.check_model():
-        print("错误: 未找到模型文件")
-        print("请运行 bash setup.sh 或手动下载:")
+        print(t("main.model_not_found"))
+        print(t("main.model_download_hint"))
         print("  curl -sSL -o pose_landmarker_lite.task \\")
         print("    https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task")
         sys.exit(1)
@@ -134,10 +136,10 @@ def _run_preview(args):
     cap = cv2.VideoCapture(args.camera)
 
     if not cap.isOpened():
-        print("错误: 无法打开摄像头")
+        print(t("main.camera_error"))
         sys.exit(1)
 
-    print("摄像头预览已启动，按 q 退出")
+    print(t("main.preview_started"))
     while True:
         ret, frame = cap.read()
         if not ret:

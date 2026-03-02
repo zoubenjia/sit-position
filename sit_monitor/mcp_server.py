@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
 
+from sit_monitor.i18n import t
 from sit_monitor.report import _read_events, daily_summary, weekly_report
 from sit_monitor.settings import Settings
 
@@ -26,7 +27,8 @@ def posture_daily_summary(date: str | None = None) -> str:
         target = datetime.strptime(date, "%Y-%m-%d").date()
     result = daily_summary(target)
     if result is None:
-        return json.dumps({"error": f"没有 {date or '今天'} 的坐姿数据"}, ensure_ascii=False)
+        msg = t("mcp.no_posture_data", date=date) if date else t("mcp.no_posture_data_today")
+        return json.dumps({"error": msg}, ensure_ascii=False)
     return json.dumps(result, ensure_ascii=False)
 
 
@@ -69,7 +71,7 @@ def posture_trend_analysis(
     """
     events = _read_events(days=days)
     if not events:
-        return json.dumps({"error": "没有坐姿数据"}, ensure_ascii=False)
+        return json.dumps({"error": t("mcp.no_events")}, ensure_ascii=False)
 
     buckets = defaultdict(lambda: {
         "good": 0, "bad": 0, "alerts": 0,
@@ -132,13 +134,13 @@ def posture_get_settings() -> str:
     data = asdict(settings)
     # 添加阈值说明
     data["_descriptions"] = {
-        "shoulder_threshold": "肩膀倾斜角度阈值（度）",
-        "neck_threshold": "头部前倾角度阈值（度）",
-        "torso_threshold": "躯干前倾角度阈值（度）",
-        "interval": "检测间隔（秒）",
-        "bad_seconds": "持续不良姿势多少秒后发出提醒",
-        "cooldown": "两次提醒之间的最小间隔（秒）",
-        "sit_max_minutes": "连续坐多少分钟后发出久坐提醒",
+        "shoulder_threshold": t("mcp.desc_shoulder"),
+        "neck_threshold": t("mcp.desc_neck"),
+        "torso_threshold": t("mcp.desc_torso"),
+        "interval": t("mcp.desc_interval"),
+        "bad_seconds": t("mcp.desc_bad_seconds"),
+        "cooldown": t("mcp.desc_cooldown"),
+        "sit_max_minutes": t("mcp.desc_sit_max"),
     }
     return json.dumps(data, ensure_ascii=False)
 
@@ -161,7 +163,7 @@ def exercise_query_sessions(
         "logs", "exercise.jsonl",
     )
     if not os.path.exists(log_path):
-        return json.dumps({"error": "没有运动训练数据", "sessions": []}, ensure_ascii=False)
+        return json.dumps({"error": t("mcp.no_exercise_data"), "sessions": []}, ensure_ascii=False)
 
     cutoff = datetime.now() - timedelta(days=days)
     events = []
@@ -220,13 +222,13 @@ def _get_cloud_client():
     """获取已认证的 CloudClient（懒加载）"""
     settings = Settings.load()
     if not settings.cloud_enabled:
-        return None, "云端功能未开启，请先在设置中开启 Enable Cloud"
+        return None, t("mcp.cloud_not_enabled")
     from sit_monitor.cloud.client import CloudClient
     client = CloudClient()
     settings.ensure_device_id()
     settings.ensure_device_id()
     if not client.ensure_auth(settings.supabase_refresh_token, settings.device_id):
-        return None, "云端认证失败，请检查网络连接"
+        return None, t("mcp.cloud_auth_failed")
     # 保存可能更新的 refresh_token
     if client.refresh_token != settings.supabase_refresh_token:
         settings.supabase_refresh_token = client.refresh_token
@@ -342,7 +344,7 @@ def social_create_challenge(
     client.close()
     if result:
         return json.dumps({"success": True, "challenge": result}, ensure_ascii=False)
-    return json.dumps({"success": False, "error": "创建挑战失败"}, ensure_ascii=False)
+    return json.dumps({"success": False, "error": t("mcp.challenge_create_failed")}, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -396,7 +398,7 @@ def battle_create(
     client.close()
     if result:
         return json.dumps({"success": True, "battle": result}, ensure_ascii=False)
-    return json.dumps({"success": False, "error": "创建对战失败"}, ensure_ascii=False)
+    return json.dumps({"success": False, "error": t("mcp.battle_create_failed")}, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -462,7 +464,7 @@ def battle_details(battle_id: str) -> str:
     client.close()
     if battle:
         return json.dumps({"battle": battle}, ensure_ascii=False)
-    return json.dumps({"error": "对战不存在"}, ensure_ascii=False)
+    return json.dumps({"error": t("mcp.battle_not_found")}, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -479,11 +481,11 @@ def battle_start_exercise(battle_id: str) -> str:
     battle = client.get_battle(battle_id)
     if not battle:
         client.close()
-        return json.dumps({"error": "对战不存在"}, ensure_ascii=False)
+        return json.dumps({"error": t("mcp.battle_not_found")}, ensure_ascii=False)
 
     if battle["status"] not in ("accepted", "active"):
         client.close()
-        return json.dumps({"error": f"对战状态为 {battle['status']}，无法开始"}, ensure_ascii=False)
+        return json.dumps({"error": t("mcp.battle_wrong_status", status=battle['status'])}, ensure_ascii=False)
 
     # 更新状态为 active
     if battle["status"] == "accepted":
@@ -496,7 +498,7 @@ def battle_start_exercise(battle_id: str) -> str:
     client.close()
     return json.dumps({
         "success": True,
-        "message": "请通过托盘菜单 '⚔️ Push-up Battle' 或命令行启动俯卧撑训练",
+        "message": t("mcp.battle_start_instruction"),
         "battle_id": battle_id,
         "time_limit": battle.get("time_limit_seconds", 120),
         "quality_weight": battle.get("quality_weight", 0.3),
@@ -552,7 +554,7 @@ def auth_unlink_provider(provider: str = "google") -> str:
     settings = Settings.load()
     settings.auth_provider = "device"
     settings.save()
-    return json.dumps({"success": True, "message": f"已解绑 {provider}，恢复匿名认证"}, ensure_ascii=False)
+    return json.dumps({"success": True, "message": t("mcp.unlink_success", provider=provider)}, ensure_ascii=False)
 
 
 if __name__ == "__main__":

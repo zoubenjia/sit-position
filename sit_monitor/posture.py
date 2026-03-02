@@ -5,6 +5,8 @@ import math
 import mediapipe as mp
 import numpy as np
 
+from sit_monitor.i18n import t
+
 # 关键点索引
 PoseLandmark = mp.tasks.vision.PoseLandmark
 LEFT_EAR = PoseLandmark.LEFT_EAR
@@ -99,20 +101,20 @@ def evaluate_posture(landmarks, thresholds):
         tilt = abs(st)
         details["shoulder"] = tilt
         if tilt > thresholds["shoulder"]:
-            side = "左肩高右肩低" if st > 0 else "右肩高左肩低"
-            reasons.append(f"肩膀歪了（{side}），摆正肩膀 ({tilt:.1f}°)")
+            side = t("posture.shoulder_left_high") if st > 0 else t("posture.shoulder_right_high")
+            reasons.append(t("posture.shoulder_skew", side=side, angle=f"{tilt:.1f}"))
 
     if ht is not None:
         ht_abs = abs(ht)
         details["head_tilt"] = ht_abs
         if ht_abs > thresholds.get("head_tilt", 8.0):
-            side = "头向右歪" if ht > 0 else "头向左歪"
-            reasons.append(f"{side}，摆正头部 ({ht_abs:.1f}°)")
+            side = t("posture.head_tilt_right") if ht > 0 else t("posture.head_tilt_left")
+            reasons.append(t("posture.head_tilt_fix", side=side, angle=f"{ht_abs:.1f}"))
 
     if hf is not None and hf > thresholds["neck"]:
-        reasons.append(f"头太靠前，往后收下巴 ({hf:.1f}°)")
+        reasons.append(t("posture.head_forward", angle=f"{hf:.1f}"))
 
     if tf is not None and tf > thresholds["torso"]:
-        reasons.append(f"身体前倾，坐直挺胸 ({tf:.1f}°)")
+        reasons.append(t("posture.torso_forward", angle=f"{tf:.1f}"))
 
     return len(reasons) > 0, details, reasons

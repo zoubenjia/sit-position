@@ -14,7 +14,7 @@ class Settings:
     shoulder_threshold: float = 10.0
     neck_threshold: float = 20.0
     torso_threshold: float = 8.0
-    head_tilt_threshold: float = 8.0
+    head_tilt_threshold: float = 12.0
     interval: float = 5.0
     bad_seconds: int = 30
     cooldown: int = 180
@@ -40,6 +40,7 @@ class Settings:
     auth_provider: str = "device"  # device, google
     # UI
     simple_mode: bool = True  # True=精简菜单, False=完整菜单
+    language: str = "zh"  # zh=中文, en=English
 
     def ensure_device_id(self):
         """首次启动时自动生成设备 ID 并保存"""

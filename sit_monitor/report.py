@@ -5,6 +5,8 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+from sit_monitor.i18n import t
+
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
 LOG_FILE = os.path.join(LOG_DIR, "posture.jsonl")
@@ -72,12 +74,13 @@ def daily_summary_text(date=None):
     """生成每日摘要文本"""
     s = daily_summary(date)
     if not s:
-        return "今日暂无坐姿数据"
+        return t("report.no_daily_data")
     return (
-        f"📊 {s['date']} 坐姿日报\n"
-        f"良好 {s['good_minutes']}min / 不良 {s['bad_minutes']}min\n"
-        f"检测 {s['good_checks'] + s['bad_checks']} 次，良好率 {s['good_pct']}%\n"
-        f"坐姿提醒 {s['alerts']} 次 | 久坐提醒 {s['sit_alerts']} 次"
+        t("report.daily_header", date=s['date']) + "\n"
+        + t("report.daily_body",
+            good_min=s['good_minutes'], bad_min=s['bad_minutes'],
+            total=s['good_checks'] + s['bad_checks'], pct=s['good_pct'],
+            alerts=s['alerts'], sit_alerts=s['sit_alerts'])
     )
 
 
@@ -85,7 +88,7 @@ def weekly_report():
     """生成最近 7 天的报告文本"""
     events = _read_events(days=7)
     if not events:
-        return "最近 7 天暂无坐姿数据"
+        return t("report.no_weekly_data")
 
     # 按日期分组
     by_day = defaultdict(lambda: {"good": 0, "bad": 0, "alerts": 0})
@@ -98,8 +101,14 @@ def weekly_report():
         elif e["event"] == "posture_alert":
             by_day[day]["alerts"] += 1
 
-    lines = ["📊 最近 7 天坐姿报告", ""]
-    lines.append(f"{'日期':>6}  {'良好':>4}  {'不良':>4}  {'良好率':>5}  {'提醒':>4}")
+    col_date = t("report.col_date")
+    col_good = t("report.col_good")
+    col_bad = t("report.col_bad")
+    col_pct = t("report.col_good_pct")
+    col_alerts = t("report.col_alerts")
+
+    lines = [t("report.weekly_title"), ""]
+    lines.append(f"{col_date:>6}  {col_good:>4}  {col_bad:>4}  {col_pct:>5}  {col_alerts:>4}")
     lines.append("-" * 36)
 
     total_good, total_bad = 0, 0
@@ -114,7 +123,8 @@ def weekly_report():
 
     grand_total = total_good + total_bad
     grand_pct = f"{total_good / grand_total * 100:.0f}%" if grand_total > 0 else "—"
+    total_label = t("report.total_label")
     lines.append("-" * 36)
-    lines.append(f"{'合计':>6}  {total_good:>4}  {total_bad:>4}  {grand_pct:>5}")
+    lines.append(f"{total_label:>6}  {total_good:>4}  {total_bad:>4}  {grand_pct:>5}")
 
     return "\n".join(lines)

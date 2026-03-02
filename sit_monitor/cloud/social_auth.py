@@ -10,6 +10,7 @@ import logging
 import webbrowser
 
 from sit_monitor.cloud.oauth_server import OAuthCallbackServer
+from sit_monitor.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
     )
     if not oauth_url:
         server.stop()
-        return {"success": False, "error": "无法获取 Google 授权 URL，请检查 Supabase 配置"}
+        return {"success": False, "error": t("social_auth.no_url")}
 
     # 追加 state 参数
     separator = "&" if "?" in oauth_url else "?"
@@ -53,7 +54,7 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
         return {
             "success": False,
             "url": oauth_url_with_state,
-            "message": "无法自动打开浏览器，请手动打开此 URL",
+            "message": t("social_auth.no_browser"),
         }
 
     # 等待回调
@@ -63,7 +64,7 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
         return {"success": False, "error": result.error}
 
     if not result.code:
-        return {"success": False, "error": "授权超时，请重试"}
+        return {"success": False, "error": t("social_auth.timeout")}
 
     # 处理 token（如果 Supabase 直接返回了 access_token）
     if result.code.startswith("token:"):
@@ -71,9 +72,10 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
         cloud_client.access_token = token
         profile = cloud_client.get_user_profile_from_provider()
         name = profile.get("full_name", "")
+        name_suffix = f"（{name}）" if name else ""
         return {
             "success": True,
-            "message": f"Google 账号已绑定{f'（{name}）' if name else ''}",
+            "message": t("social_auth.google_linked", name_suffix=name_suffix),
             "profile": profile,
         }
 
@@ -81,10 +83,11 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
     if cloud_client.exchange_code_for_session(result.code):
         profile = cloud_client.get_user_profile_from_provider()
         name = profile.get("full_name", "")
+        name_suffix = f"（{name}）" if name else ""
         return {
             "success": True,
-            "message": f"Google 账号已绑定{f'（{name}）' if name else ''}",
+            "message": t("social_auth.google_linked", name_suffix=name_suffix),
             "profile": profile,
         }
 
-    return {"success": False, "error": "token 交换失败，请重试"}
+    return {"success": False, "error": t("social_auth.token_failed")}

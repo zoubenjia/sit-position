@@ -7,6 +7,7 @@ from enum import Enum
 import mediapipe as mp
 
 from sit_monitor.exercise.base import ExerciseAnalyzer, RepPhase, RepResult
+from sit_monitor.i18n import t
 
 PoseLandmark = mp.tasks.vision.PoseLandmark
 
@@ -154,8 +155,11 @@ def classify_rep(form_feedbacks: list[tuple[str, str]], min_elbow: float) -> str
 class PushupAnalyzer(ExerciseAnalyzer):
     """俯卧撑分析器"""
 
-    exercise_name = "俯卧撑"
     exercise_id = "pushup"
+
+    @property
+    def exercise_name(self):
+        return t("pushup.name")
 
     def __init__(self, elbow_down=ELBOW_DOWN_THRESHOLD, elbow_up=ELBOW_UP_THRESHOLD,
                  hip_threshold=HIP_SAG_THRESHOLD, depth_threshold=ELBOW_SHALLOW_THRESHOLD):
@@ -211,29 +215,25 @@ class PushupAnalyzer(ExerciseAnalyzer):
         if self._prep_step == _PrepStep.SETUP:
             self._prep_step = _PrepStep.FIND
             self._prep_step_time = now
-            return (
-                "请把电脑放在地上，打开屏幕，"
-                "让摄像头对准你要趴下的位置。"
-                "然后侧对摄像头，站在约两米远的地方"
-            )
+            return t("pushup.setup_guide")
 
         # 未检测到人体
         if landmarks is None:
-            return "请侧对摄像头，站到画面中"
+            return t("pushup.find_person")
 
         # Step 1: 只要检测到人体就行（站着时只看到腿很正常）
         if self._prep_step == _PrepStep.FIND:
             # 检测到人了，进入下一步
             self._prep_step = _PrepStep.STAND_OK
             self._prep_step_time = now
-            return "检测到了！现在请趴下，双手撑地，准备俯卧撑"
+            return t("pushup.person_found")
 
         # Step 2: 提示趴下，给反应时间
         if self._prep_step == _PrepStep.STAND_OK:
             if now - self._prep_step_time > 3:
                 self._prep_step = _PrepStep.LIE_DOWN
                 self._prep_step_time = now
-            return "请趴下，双手撑地，准备俯卧撑"
+            return t("pushup.lie_down")
 
         body_ang = _body_angle(landmarks)  # 0=水平, 90=垂直
         visible = self._key_landmarks_visible(landmarks)
@@ -243,11 +243,11 @@ class PushupAnalyzer(ExerciseAnalyzer):
             if body_ang <= READY_BODY_ANGLE:
                 return None  # 就绪！
             elif body_ang <= 60:
-                return "快到了，身体再放平一些"
+                return t("pushup.almost_ready")
             else:
-                return "请趴下，双手撑地，准备俯卧撑"
+                return t("pushup.lie_down")
 
-        return "请侧对摄像头站好"
+        return t("pushup.stand_ready")
 
     def analyze_frame(self, landmarks, frame_time: float) -> RepResult:
         """分析一帧，返回 RepResult"""
@@ -309,7 +309,7 @@ class PushupAnalyzer(ExerciseAnalyzer):
                 self.rep_count += 1
 
                 if self._min_elbow_in_rep > self.depth_threshold:
-                    feedbacks.append(("shallow", "再低一点，手臂弯到九十度"))
+                    feedbacks.append(("shallow", t("pushup.shallow")))
 
                 self.phase = RepPhase.UP
                 self._min_elbow_in_rep = 180.0
@@ -317,14 +317,14 @@ class PushupAnalyzer(ExerciseAnalyzer):
         # === 姿势纠正（仅在 READY/UP/DOWN 阶段） ===
         if self.phase in (RepPhase.READY, RepPhase.UP, RepPhase.DOWN):
             if hip_dev > self.hip_sag:
-                feedbacks.append(("hip_sag", "臀部太低了，收紧核心抬起来"))
+                feedbacks.append(("hip_sag", t("pushup.hip_sag")))
             elif hip_dev < self.hip_pike:
-                feedbacks.append(("hip_pike", "臀部太高了，身体保持一条直线"))
+                feedbacks.append(("hip_pike", t("pushup.hip_pike")))
 
             nose = landmarks[NOSE]
             shoulder_mid = _mid(landmarks[LEFT_SHOULDER], landmarks[RIGHT_SHOULDER])
             if nose.y - shoulder_mid.y > HEAD_DROP_THRESHOLD:
-                feedbacks.append(("head_drop", "头不要低，眼睛看前方地面"))
+                feedbacks.append(("head_drop", t("pushup.head_drop")))
 
         return RepResult(
             phase=self.phase,

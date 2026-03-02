@@ -2,6 +2,8 @@
 
 import time
 
+from sit_monitor.i18n import t
+
 
 class Stats:
     def __init__(self):
@@ -45,12 +47,12 @@ class Stats:
         bad_pct = (self.bad_seconds_total / (self.good_seconds_total + self.bad_seconds_total) * 100
                    if (self.good_seconds_total + self.bad_seconds_total) > 0 else 0)
         lines = [
-            f"运行时长: {mins:.1f} 分钟",
-            f"总检测次数: {self.total_checks}",
-            f"  姿势良好: {self.good_count} 次 ({self.good_seconds_total/60:.1f} 分钟)",
-            f"  姿势不良: {self.bad_count} 次 ({self.bad_seconds_total/60:.1f} 分钟, {bad_pct:.0f}%)",
-            f"  人不在位: {self.no_person_count} 次",
-            f"坐姿提醒: {self.notifications_sent} 次",
-            f"久坐提醒: {self.sit_notifications_sent} 次",
+            t("stats.runtime", minutes=mins),
+            t("stats.total_checks", count=self.total_checks),
+            t("stats.good_posture", count=self.good_count, minutes=self.good_seconds_total/60),
+            t("stats.bad_posture", count=self.bad_count, minutes=self.bad_seconds_total/60, pct=bad_pct),
+            t("stats.no_person", count=self.no_person_count),
+            t("stats.posture_alerts", count=self.notifications_sent),
+            t("stats.sit_alerts", count=self.sit_notifications_sent),
         ]
         return "\n".join(lines)

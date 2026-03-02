@@ -2,12 +2,14 @@
 
 from dataclasses import dataclass, field
 
+from sit_monitor.i18n import t
+
 
 @dataclass
 class UserProfile:
     user_id: str = ""
     device_id: str = ""
-    nickname: str = "匿名用户"
+    nickname: str = field(default_factory=lambda: t("cloud.default_nickname"))
     share_posture: bool = True
     share_exercise: bool = True
     avatar_url: str = ""

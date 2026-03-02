@@ -3,18 +3,28 @@
 import subprocess
 import sys
 
+from sit_monitor.i18n import t
 
-def speak(text, voice="Tingting", blocking=False):
+
+def _default_voice():
+    """根据当前语言返回默认 macOS 语音"""
+    return t("platform.tts_voice")
+
+
+def speak(text, voice=None, blocking=False):
     """播报文字。
 
     Args:
         text: 要播报的文字
-        voice: macOS 语音名称（Windows 自动选择中文声音）
+        voice: macOS 语音名称，None 则根据语言自动选择
         blocking: 是否阻塞等待播放完成
 
     Returns:
         macOS 非阻塞时返回 Popen（可 terminate 打断），其余返回 None
     """
+    if voice is None:
+        voice = _default_voice()
+
     if sys.platform == "darwin":
         proc = subprocess.Popen(
             ["say", "-v", voice, text],
@@ -33,9 +43,13 @@ def speak(text, voice="Tingting", blocking=False):
             return None
 
         engine = pyttsx3.init()
-        # 尝试选择中文声音
+        from sit_monitor.i18n import get_language
+        lang = get_language()
         for v in engine.getProperty("voices"):
-            if "chinese" in v.name.lower() or "zh" in v.id.lower():
+            if lang == "zh" and ("chinese" in v.name.lower() or "zh" in v.id.lower()):
+                engine.setProperty("voice", v.id)
+                break
+            elif lang == "en" and ("english" in v.name.lower() or "en" in v.id.lower()):
                 engine.setProperty("voice", v.id)
                 break
         engine.say(text)

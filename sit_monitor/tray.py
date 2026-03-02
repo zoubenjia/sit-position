@@ -12,6 +12,7 @@ import rumps
 
 from sit_monitor.core import PostureMonitor
 from sit_monitor.exercise import EXERCISE_REGISTRY, ExerciseMonitor
+from sit_monitor.i18n import get_language, set_language, t
 from sit_monitor.report import daily_summary_text, weekly_report
 from sit_monitor.settings import Settings
 
@@ -50,6 +51,21 @@ class TrayApp(rumps.App):
         self._cloud_client = None
         self._sync_manager = None
         self._achievement_engine = None
+        # Menu item references (set by _build_menu)
+        self._mi_hint = None
+        self._mi_start = None
+        self._mi_pushup = None
+        self._mi_stats = None
+        self._mi_cloud = None
+        self._mi_preview = None
+        self._mi_snooze = None
+        self._mi_achievements = None
+        self._mi_nickname = None
+        self._mi_share = None
+        self._mi_auth = None
+        self._mi_sound = None
+        self._mi_auto_pause = None
+        self._mi_fatigue = None
         self._build_menu()
         self._start_auto_update_check()
 
@@ -63,117 +79,158 @@ class TrayApp(rumps.App):
 
     def _menu_simple(self, s):
         """精简模式：只保留核心功能，新用户友好"""
+        self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
+        self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
+        self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
+        self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
+        self._mi_cloud = rumps.MenuItem(
+            f"{'☑' if s.cloud_enabled else '☐'} {t('tray.menu.enable_cloud')}",
+            callback=self._toggle_cloud,
+        )
         return [
-            rumps.MenuItem("✓ 姿势良好", callback=None),
+            self._mi_hint,
             None,
-            rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
-            rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
-            rumps.MenuItem("⚡ Quick Battle", callback=self._quick_battle),
+            self._mi_start,
+            self._mi_pushup,
+            rumps.MenuItem(t("tray.menu.quick_battle"), callback=self._quick_battle),
             None,
-            rumps.MenuItem("Statistics", callback=None),
-            rumps.MenuItem("View Report", callback=self._view_report),
+            self._mi_stats,
+            rumps.MenuItem(t("tray.menu.view_report"), callback=self._view_report),
             None,
-            rumps.MenuItem(
-                f"{'☑' if s.cloud_enabled else '☐'} Enable Cloud",
-                callback=self._toggle_cloud,
-            ),
-            rumps.MenuItem("🔧 Advanced Mode", callback=self._toggle_mode),
-            rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
+            self._mi_cloud,
+            rumps.MenuItem(t("tray.menu.advanced_mode"), callback=self._toggle_mode),
+            rumps.MenuItem(t("tray.menu.language_switch"), callback=self._switch_language),
+            rumps.MenuItem(t("tray.menu.about", version=VERSION), callback=self._show_about),
             None,
         ]
 
     def _menu_advanced(self, s):
         """进阶模式：完整功能"""
+        self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
+        self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
+        self._mi_preview = rumps.MenuItem(t("tray.menu.show_camera"), callback=self._toggle_preview)
+        self._mi_snooze = rumps.MenuItem(t("tray.menu.pause_alerts"), callback=self._snooze)
+        self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
+        self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
+
+        # Stats submenu items
+        mi_stats_good = rumps.MenuItem(t("tray.menu.stats_good", minutes="0"), callback=None)
+        mi_stats_bad = rumps.MenuItem(t("tray.menu.stats_bad", minutes="0"), callback=None)
+        mi_stats_alerts = rumps.MenuItem(t("tray.menu.stats_alerts", count=0), callback=None)
+        self._mi_stats_items = (mi_stats_good, mi_stats_bad, mi_stats_alerts)
+
+        # Settings submenu
+        self._mi_setting_labels = {}
+        settings_items = []
+        for attr, name_key, unit in [
+            ("shoulder_threshold", "tray.menu.setting_shoulder", "°"),
+            ("neck_threshold", "tray.menu.setting_neck", "°"),
+            ("torso_threshold", "tray.menu.setting_torso", "°"),
+            ("head_tilt_threshold", "tray.menu.setting_head_tilt", "°"),
+            ("bad_seconds", "tray.menu.setting_bad_seconds", "s"),
+        ]:
+            val = getattr(s, attr)
+            name = t(name_key)
+            label_item = rumps.MenuItem(f"{name}: {val}{unit}", callback=None)
+            self._mi_setting_labels[attr] = (label_item, name_key, unit)
+            step = 5 if attr == "bad_seconds" else 1
+            settings_items.extend([
+                label_item,
+                rumps.MenuItem(f"  {name} +{step}",
+                               callback=lambda _, a=attr, d=step: self._adjust(a, d)),
+                rumps.MenuItem(f"  {name} -{step}",
+                               callback=lambda _, a=attr, d=-step: self._adjust(a, d)),
+                None,
+            ])
+
+        self._mi_sound = rumps.MenuItem(
+            f"{'☑' if s.sound else '☐'} {t('tray.menu.sound')}",
+            callback=self._toggle_sound,
+        )
+        self._mi_auto_pause = rumps.MenuItem(
+            f"{'☑' if s.auto_pause else '☐'} {t('tray.menu.auto_pause')}",
+            callback=self._toggle_auto_pause,
+        )
+        self._mi_fatigue = rumps.MenuItem(
+            f"{'☑' if s.fatigue_enabled else '☐'} {t('tray.menu.fatigue_detection')}",
+            callback=self._toggle_fatigue,
+        )
+        settings_items.extend([self._mi_sound, self._mi_auto_pause, None, self._mi_fatigue])
+
+        # Social submenu
+        self._mi_achievements = rumps.MenuItem(
+            t("tray.menu.achievements", unlocked=0, total=10),
+            callback=self._show_achievements,
+        )
+        self._mi_nickname = rumps.MenuItem(
+            t("tray.menu.nickname", name=s.nickname),
+            callback=self._change_nickname,
+        )
+        self._mi_share = rumps.MenuItem(
+            f"{'☑' if s.share_posture else '☐'} {t('tray.menu.share_data')}",
+            callback=self._toggle_share,
+        )
+
+        # Account submenu
+        self._mi_auth = rumps.MenuItem(t("tray.menu.auth_status", provider=s.auth_provider), callback=None)
+
+        # Cloud toggle
+        self._mi_cloud = rumps.MenuItem(
+            f"{'☑' if s.cloud_enabled else '☐'} {t('tray.menu.enable_cloud')}",
+            callback=self._toggle_cloud,
+        )
+
         return [
-            rumps.MenuItem("✓ 姿势良好", callback=None),
+            self._mi_hint,
             None,
-            rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
-            rumps.MenuItem("📷 Show Camera", callback=self._toggle_preview),
-            rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
+            self._mi_start,
+            self._mi_preview,
+            self._mi_snooze,
             None,
-            rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
-            [rumps.MenuItem("⚔️ Push-up Battle"), [
-                rumps.MenuItem("⚡ Quick Battle", callback=self._quick_battle),
-                rumps.MenuItem("📋 My Battles", callback=self._show_battles),
+            self._mi_pushup,
+            [rumps.MenuItem(t("tray.menu.battle_submenu")), [
+                rumps.MenuItem(t("tray.menu.quick_battle"), callback=self._quick_battle),
+                rumps.MenuItem(t("tray.menu.my_battles"), callback=self._show_battles),
             ]],
             None,
-            rumps.MenuItem("Statistics", callback=None),
-            [rumps.MenuItem("Stats"), [
-                rumps.MenuItem("姿势良好: 0 min", callback=None),
-                rumps.MenuItem("姿势不良: 0 min", callback=None),
-                rumps.MenuItem("提醒次数: 0", callback=None),
+            self._mi_stats,
+            [rumps.MenuItem(t("tray.menu.stats_submenu")), [
+                mi_stats_good, mi_stats_bad, mi_stats_alerts,
             ]],
-            rumps.MenuItem("View Report", callback=self._view_report),
+            rumps.MenuItem(t("tray.menu.view_report"), callback=self._view_report),
             None,
-            [rumps.MenuItem("Settings"), [
-                rumps.MenuItem(f"Shoulder: {s.shoulder_threshold}°", callback=None),
-                rumps.MenuItem("  Shoulder +1", callback=lambda _: self._adjust("shoulder_threshold", 1)),
-                rumps.MenuItem("  Shoulder -1", callback=lambda _: self._adjust("shoulder_threshold", -1)),
+            [rumps.MenuItem(t("tray.menu.settings_submenu")), settings_items],
+            None,
+            [rumps.MenuItem(t("tray.menu.social_submenu")), [
+                rumps.MenuItem(t("tray.menu.leaderboard_today"), callback=self._show_leaderboard_daily),
+                rumps.MenuItem(t("tray.menu.leaderboard_week"), callback=self._show_leaderboard_weekly),
                 None,
-                rumps.MenuItem(f"Neck: {s.neck_threshold}°", callback=None),
-                rumps.MenuItem("  Neck +1", callback=lambda _: self._adjust("neck_threshold", 1)),
-                rumps.MenuItem("  Neck -1", callback=lambda _: self._adjust("neck_threshold", -1)),
+                self._mi_achievements,
+                rumps.MenuItem(t("tray.menu.challenges"), callback=self._show_challenges),
                 None,
-                rumps.MenuItem(f"Torso: {s.torso_threshold}°", callback=None),
-                rumps.MenuItem("  Torso +1", callback=lambda _: self._adjust("torso_threshold", 1)),
-                rumps.MenuItem("  Torso -1", callback=lambda _: self._adjust("torso_threshold", -1)),
-                None,
-                rumps.MenuItem(f"Bad Seconds: {s.bad_seconds}s", callback=None),
-                rumps.MenuItem("  Bad Seconds +5", callback=lambda _: self._adjust("bad_seconds", 5)),
-                rumps.MenuItem("  Bad Seconds -5", callback=lambda _: self._adjust("bad_seconds", -5)),
-                None,
-                rumps.MenuItem(
-                    f"{'☑' if s.sound else '☐'} Sound",
-                    callback=self._toggle_sound,
-                ),
-                rumps.MenuItem(
-                    f"{'☑' if s.auto_pause else '☐'} Auto-pause",
-                    callback=self._toggle_auto_pause,
-                ),
-                None,
-                rumps.MenuItem(
-                    f"{'☑' if s.fatigue_enabled else '☐'} Fatigue Detection",
-                    callback=self._toggle_fatigue,
-                ),
+                rumps.MenuItem(t("tray.menu.sync_now"), callback=self._sync_now),
+                self._mi_nickname,
+                self._mi_share,
+            ]],
+            [rumps.MenuItem(t("tray.menu.account_submenu")), [
+                self._mi_auth,
+                rumps.MenuItem(t("tray.menu.link_google"), callback=self._link_google),
+                rumps.MenuItem(t("tray.menu.unlink"), callback=self._unlink_provider),
             ]],
             None,
-            [rumps.MenuItem("🌐 Social"), [
-                rumps.MenuItem("📊 Leaderboard (Today)", callback=self._show_leaderboard_daily),
-                rumps.MenuItem("📊 Leaderboard (Week)", callback=self._show_leaderboard_weekly),
-                None,
-                rumps.MenuItem("🏅 My Achievements (0/10)", callback=self._show_achievements),
-                rumps.MenuItem("⚔️ Challenges", callback=self._show_challenges),
-                None,
-                rumps.MenuItem("🔄 Sync Now", callback=self._sync_now),
-                rumps.MenuItem(f"Nickname: {s.nickname}", callback=self._change_nickname),
-                rumps.MenuItem(
-                    f"{'☑' if s.share_posture else '☐'} Share Data",
-                    callback=self._toggle_share,
-                ),
-            ]],
-            [rumps.MenuItem("🔐 Account"), [
-                rumps.MenuItem(f"Auth: {s.auth_provider}", callback=None),
-                rumps.MenuItem("🔗 Link Google", callback=self._link_google),
-                rumps.MenuItem("🔓 Unlink", callback=self._unlink_provider),
-            ]],
+            self._mi_cloud,
             None,
-            rumps.MenuItem(
-                f"{'☑' if s.cloud_enabled else '☐'} Enable Cloud",
-                callback=self._toggle_cloud,
-            ),
-            None,
-            rumps.MenuItem("Check for Updates", callback=self._check_update),
-            rumps.MenuItem("📋 Simple Mode", callback=self._toggle_mode),
-            rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
+            rumps.MenuItem(t("tray.menu.check_updates"), callback=self._check_update),
+            rumps.MenuItem(t("tray.menu.simple_mode"), callback=self._toggle_mode),
+            rumps.MenuItem(t("tray.menu.language_switch"), callback=self._switch_language),
+            rumps.MenuItem(t("tray.menu.about", version=VERSION), callback=self._show_about),
             None,
         ]
 
-    def _toggle_mode(self, _):
-        """切换简单/进阶模式"""
-        self.settings.simple_mode = not self.settings.simple_mode
-        self.settings.save()
-        # 重建菜单
+    def _rebuild_menu(self):
+        """清空并重建菜单（语言切换/模式切换共用）"""
         was_running = self._is_running()
+        was_exercising = self._is_exercising()
         keys = list(self.menu.keys())
         for key in keys:
             try:
@@ -181,14 +238,27 @@ class TrayApp(rumps.App):
             except Exception:
                 pass
         self._build_menu()
-        # 恢复运行状态文字
         if was_running:
-            try:
-                self.menu["Start Monitoring"].title = "Stop Monitoring"
-            except Exception:
-                pass
-        mode_name = "精简" if self.settings.simple_mode else "进阶"
-        rumps.notification("Sit Monitor", f"已切换到{mode_name}模式", "")
+            self._mi_start.title = t("tray.menu.stop_monitoring")
+        if was_exercising:
+            self._mi_pushup.title = t("tray.menu.stop_pushup")
+
+    def _switch_language(self, _):
+        """切换语言"""
+        lang = get_language()
+        new_lang = "en" if lang == "zh" else "zh"
+        self.settings.language = new_lang
+        self.settings.save()
+        set_language(new_lang)
+        self._rebuild_menu()
+
+    def _toggle_mode(self, _):
+        """切换简单/进阶模式"""
+        self.settings.simple_mode = not self.settings.simple_mode
+        self.settings.save()
+        self._rebuild_menu()
+        mode_name = t("tray.mode.simple") if self.settings.simple_mode else t("tray.mode.advanced")
+        rumps.notification("Sit Monitor", t("tray.mode.switched", mode=mode_name), "")
 
     # --- 图标 ---
 
@@ -217,9 +287,7 @@ class TrayApp(rumps.App):
 
     def _update_posture_hint(self, state, details):
         """实时更新菜单顶部的姿势提示"""
-        try:
-            hint_item = self.menu["✓ 姿势良好"]
-        except KeyError:
+        if not self._mi_hint:
             return
 
         fatigue = details.get("fatigue")
@@ -227,24 +295,25 @@ class TrayApp(rumps.App):
         if fatigue:
             fl = fatigue.get("level", "")
             if fl == "very_tired":
-                fatigue_suffix = " | 😴 非常疲劳"
+                fatigue_suffix = t("tray.hint.fatigue_very_tired")
             elif fl == "tired":
-                fatigue_suffix = " | 🥱 疲劳"
+                fatigue_suffix = t("tray.hint.fatigue_tired")
 
         if state == "good":
-            hint_item.title = "✓ 姿势良好" + fatigue_suffix
+            self._mi_hint.title = t("tray.hint.good") + fatigue_suffix
         elif state == "bad":
             reasons = details.get("reasons", [])
             if reasons:
-                hint_item.title = "⚠ " + "；".join(reasons) + fatigue_suffix
+                sep = "；" if get_language() == "zh" else "; "
+                self._mi_hint.title = "⚠ " + sep.join(reasons) + fatigue_suffix
             else:
-                hint_item.title = "⚠ 请纠正坐姿" + fatigue_suffix
+                self._mi_hint.title = t("tray.hint.bad_default") + fatigue_suffix
         elif state == "away":
-            hint_item.title = "— 未检测到人"
+            self._mi_hint.title = t("tray.hint.away")
         elif state == "camera_wait":
-            hint_item.title = "⏳ 等待摄像头"
+            self._mi_hint.title = t("tray.hint.camera_wait")
         elif state == "stopped":
-            hint_item.title = "— 未启动"
+            self._mi_hint.title = t("tray.hint.stopped")
 
     def _update_stats_menu(self):
         stats = self.monitor.stats if self.monitor else None
@@ -254,10 +323,14 @@ class TrayApp(rumps.App):
             notif = stats.notifications_sent
         else:
             good_min, bad_min, notif = "0", "0", 0
-        try:
-            self.menu["Statistics"].title = f"良好 {good_min}min | 不良 {bad_min}min | 提醒 {notif}次"
-        except Exception:
-            pass
+        if self._mi_stats:
+            self._mi_stats.title = t("tray.menu.statistics_summary", good=good_min, bad=bad_min, notif=notif)
+        # Update advanced stats submenu if available
+        if hasattr(self, '_mi_stats_items') and self._mi_stats_items:
+            g, b, a = self._mi_stats_items
+            g.title = t("tray.menu.stats_good", minutes=good_min)
+            b.title = t("tray.menu.stats_bad", minutes=bad_min)
+            a.title = t("tray.menu.stats_alerts", count=notif)
 
     # --- 监控控制 ---
 
@@ -267,10 +340,10 @@ class TrayApp(rumps.App):
     def _toggle_monitor(self, sender):
         if self._is_running():
             self._stop_monitor()
-            sender.title = "Start Monitoring"
+            sender.title = t("tray.menu.start_monitoring")
         else:
             self._start_monitor()
-            sender.title = "Stop Monitoring"
+            sender.title = t("tray.menu.stop_monitoring")
 
     def _start_monitor(self):
         if self._is_running():
@@ -281,7 +354,7 @@ class TrayApp(rumps.App):
             on_state_change=self._on_state_change,
         )
         if not self.monitor.check_model():
-            rumps.notification("Sit Monitor", "错误", "未找到模型文件，请运行 bash setup.sh")
+            rumps.notification("Sit Monitor", "Error", t("tray.notify.model_error"))
             return
         self.monitor_thread = threading.Thread(target=self.monitor.run, daemon=True)
         self.monitor_thread.start()
@@ -304,16 +377,13 @@ class TrayApp(rumps.App):
     def _toggle_pushup(self, sender):
         if self._is_exercising():
             self._stop_exercise()
-            sender.title = "🏋️ Pushup Training"
+            sender.title = t("tray.menu.pushup_training")
         else:
             # 暂停坐姿监控，启动俯卧撑训练
             was_monitoring = self._is_running()
             if was_monitoring:
                 self._stop_monitor()
-                try:
-                    self.menu["Start Monitoring"].title = "Start Monitoring"
-                except Exception:
-                    pass
+                self._mi_start.title = t("tray.menu.start_monitoring")
 
             self._start_exercise("pushup", sender, was_monitoring)
 
@@ -323,19 +393,17 @@ class TrayApp(rumps.App):
         args = [python, "-m", "sit_monitor", exercise_id,
                 "--camera", str(self.settings.camera), "--debug"]
         self._exercise_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
-        sender.title = "⏹ Stop Pushup"
+        sender.title = t("tray.menu.stop_pushup")
 
         def wait_and_cleanup():
             self._exercise_proc.wait()
-            sender.title = "🏋️ Pushup Training"
+            sender.title = t("tray.menu.pushup_training")
             self._exercise_proc = None
-            rumps.notification("Sit Monitor", "训练结束", "俯卧撑训练已完成")
+            rumps.notification("Sit Monitor", t("tray.notify.exercise_done_title"),
+                               t("tray.notify.exercise_done_msg"))
             if resume_posture_after:
                 self._start_monitor()
-                try:
-                    self.menu["Start Monitoring"].title = "Stop Monitoring"
-                except Exception:
-                    pass
+                self._mi_start.title = t("tray.menu.stop_monitoring")
 
         threading.Thread(target=wait_and_cleanup, daemon=True).start()
 
@@ -356,7 +424,7 @@ class TrayApp(rumps.App):
     def _toggle_preview(self, sender):
         if self._is_previewing():
             self._stop_preview()
-            sender.title = "📷 Show Camera"
+            sender.title = t("tray.menu.show_camera")
         else:
             self._start_preview(sender)
 
@@ -365,11 +433,11 @@ class TrayApp(rumps.App):
         args = [python, "-m", "sit_monitor", "preview",
                 "--camera", str(self.settings.camera)]
         self._preview_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
-        sender.title = "📷 Hide Camera"
+        sender.title = t("tray.menu.hide_camera")
 
         def wait_and_cleanup():
             self._preview_proc.wait()
-            sender.title = "📷 Show Camera"
+            sender.title = t("tray.menu.show_camera")
             self._preview_proc = None
 
         threading.Thread(target=wait_and_cleanup, daemon=True).start()
@@ -388,19 +456,19 @@ class TrayApp(rumps.App):
     def _snooze(self, sender):
         if self.monitor:
             self.monitor.snooze_until = time.time() + 600  # 10 分钟
-            rumps.notification("Sit Monitor", "已暂停提醒", "10 分钟内不会发送提醒")
-            sender.title = "Alerts paused (10min)"
+            rumps.notification("Sit Monitor", t("tray.notify.snooze_title"), t("tray.notify.snooze_msg"))
+            sender.title = t("tray.menu.alerts_paused")
             # 10 分钟后恢复菜单文字
             def restore():
                 time.sleep(600)
-                sender.title = "Pause Alerts 10min"
+                sender.title = t("tray.menu.pause_alerts")
             threading.Thread(target=restore, daemon=True).start()
 
     # --- Report ---
 
     def _view_report(self, _):
         text = weekly_report()
-        rumps.alert(title="Sit Monitor — 周报", message=text, ok="好的")
+        rumps.alert(title=t("tray.alert.weekly_report_title"), message=text, ok=t("btn.ok"))
 
     def _check_daily_report(self, _):
         """每分钟检查一次，如果日期变了就发送昨日摘要"""
@@ -413,8 +481,8 @@ class TrayApp(rumps.App):
             self._last_daily_report_date = today
             yesterday = today - timedelta(days=1)
             text = daily_summary_text(yesterday)
-            if "暂无" not in text:
-                rumps.notification("Sit Monitor", "昨日坐姿日报", text)
+            if t("tray.alert.no_data_keyword") not in text:
+                rumps.notification("Sit Monitor", t("tray.alert.daily_report_title"), text)
 
     # --- Settings ---
 
@@ -427,33 +495,28 @@ class TrayApp(rumps.App):
             new_val = round(new_val, 1)
         setattr(self.settings, attr, new_val)
         self.settings.save()
-        if attr == "bad_seconds":
-            name, unit = "Bad Seconds", "s"
-        else:
-            name, unit = attr.replace("_threshold", "").capitalize(), "°"
-        try:
-            self.menu["Settings"][f"{name}: {val}{unit}"].title = f"{name}: {new_val}{unit}"
-        except Exception:
-            pass
+        if attr in self._mi_setting_labels:
+            label_item, name_key, unit = self._mi_setting_labels[attr]
+            label_item.title = f"{t(name_key)}: {new_val}{unit}"
 
     def _toggle_sound(self, sender):
         self.settings.sound = not self.settings.sound
         self.settings.save()
-        sender.title = f"{'☑' if self.settings.sound else '☐'} Sound"
+        sender.title = f"{'☑' if self.settings.sound else '☐'} {t('tray.menu.sound')}"
 
     def _toggle_auto_pause(self, sender):
         self.settings.auto_pause = not self.settings.auto_pause
         self.settings.save()
-        sender.title = f"{'☑' if self.settings.auto_pause else '☐'} Auto-pause"
+        sender.title = f"{'☑' if self.settings.auto_pause else '☐'} {t('tray.menu.auto_pause')}"
 
     def _toggle_fatigue(self, sender):
         self.settings.fatigue_enabled = not self.settings.fatigue_enabled
         self.settings.save()
-        sender.title = f"{'☑' if self.settings.fatigue_enabled else '☐'} Fatigue Detection"
+        sender.title = f"{'☑' if self.settings.fatigue_enabled else '☐'} {t('tray.menu.fatigue_detection')}"
         if self.settings.fatigue_enabled:
-            rumps.notification("Sit Monitor", "疲劳检测已开启", "将在下次启动监控时生效")
+            rumps.notification("Sit Monitor", t("tray.notify.fatigue_on"), t("tray.notify.fatigue_on_msg"))
         else:
-            rumps.notification("Sit Monitor", "疲劳检测已关闭", "")
+            rumps.notification("Sit Monitor", t("tray.notify.fatigue_off"), "")
 
     # --- Cloud / Social ---
 
@@ -483,7 +546,7 @@ class TrayApp(rumps.App):
     def _toggle_cloud(self, sender):
         self.settings.cloud_enabled = not self.settings.cloud_enabled
         self.settings.save()
-        sender.title = f"{'☑' if self.settings.cloud_enabled else '☐'} Enable Cloud"
+        sender.title = f"{'☑' if self.settings.cloud_enabled else '☐'} {t('tray.menu.enable_cloud')}"
         if self.settings.cloud_enabled:
             self._init_cloud()
         else:
@@ -494,53 +557,53 @@ class TrayApp(rumps.App):
         if self.settings.simple_mode:
             return
         try:
-            if self._achievement_engine:
+            if self._achievement_engine and self._mi_achievements:
                 n = self._achievement_engine.unlocked_count
                 total = self._achievement_engine.total_count
-                self.menu["🌐 Social"]["🏅 My Achievements (0/10)"].title = f"🏅 My Achievements ({n}/{total})"
+                self._mi_achievements.title = t("tray.menu.achievements", unlocked=n, total=total)
         except Exception:
             pass
 
     def _show_leaderboard_daily(self, _):
         if not self._cloud_client:
-            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            rumps.alert("Social", t("tray.alert.cloud_required"))
             return
         try:
             today = str(date.today())
             entries = self._cloud_client.leaderboard_daily(today)
             if not entries:
-                rumps.alert("📊 今日排行榜", "暂无数据")
+                rumps.alert(t("tray.alert.leaderboard_today_title"), t("tray.alert.leaderboard_no_data"))
                 return
-            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines = [t("tray.alert.leaderboard_header")]
             lines.append("-" * 40)
             for e in entries[:20]:
                 lines.append(
                     f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}"
                 )
-            rumps.alert(title="📊 今日排行榜", message="\n".join(lines), ok="好的")
+            rumps.alert(title=t("tray.alert.leaderboard_today_title"), message="\n".join(lines), ok=t("btn.ok"))
         except Exception as e:
-            rumps.alert("排行榜错误", str(e))
+            rumps.alert(t("tray.alert.leaderboard_error"), str(e))
 
     def _show_leaderboard_weekly(self, _):
         if not self._cloud_client:
-            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            rumps.alert("Social", t("tray.alert.cloud_required"))
             return
         try:
             today = date.today()
             week_start = str(today - timedelta(days=today.weekday()))
             entries = self._cloud_client.leaderboard_weekly(week_start)
             if not entries:
-                rumps.alert("📊 本周排行榜", "暂无数据")
+                rumps.alert(t("tray.alert.leaderboard_week_title"), t("tray.alert.leaderboard_no_data"))
                 return
-            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines = [t("tray.alert.leaderboard_header")]
             lines.append("-" * 40)
             for e in entries[:20]:
                 lines.append(
                     f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}"
                 )
-            rumps.alert(title="📊 本周排行榜", message="\n".join(lines), ok="好的")
+            rumps.alert(title=t("tray.alert.leaderboard_week_title"), message="\n".join(lines), ok=t("btn.ok"))
         except Exception as e:
-            rumps.alert("排行榜错误", str(e))
+            rumps.alert(t("tray.alert.leaderboard_error"), str(e))
 
     def _show_achievements(self, _):
         if not self._achievement_engine:
@@ -552,57 +615,58 @@ class TrayApp(rumps.App):
             status = "✅" if a["unlocked"] else "🔒"
             lines.append(f"{status} {a['icon']} {a['name']}: {a['description']}")
         rumps.alert(
-            title=f"🏅 成就 ({self._achievement_engine.unlocked_count}/{self._achievement_engine.total_count})",
+            title=t("tray.alert.achievements_title",
+                     unlocked=self._achievement_engine.unlocked_count,
+                     total=self._achievement_engine.total_count),
             message="\n".join(lines),
-            ok="好的",
+            ok=t("btn.ok"),
         )
 
     def _show_challenges(self, _):
         if not self._cloud_client:
-            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            rumps.alert("Social", t("tray.alert.cloud_required"))
             return
         try:
             challenges = self._cloud_client.list_my_challenges()
             if not challenges:
-                rumps.alert("⚔️ 挑战", "暂无挑战\n\n通过 MCP 工具 social_create_challenge 发起挑战")
+                rumps.alert(t("tray.alert.challenges_title"), t("tray.alert.no_challenges"))
                 return
             lines = []
             for ch in challenges[:10]:
                 status = {"pending": "⏳", "active": "⚔️", "completed": "✅"}.get(ch.get("status"), "?")
                 lines.append(
                     f"{status} {ch.get('challenge_type','?')} "
-                    f"目标:{ch.get('target_value',0)} "
-                    f"发起方:{ch.get('creator_score',0):.0f} vs 接受方:{ch.get('opponent_score',0):.0f}"
+                    f"{t('tray.alert.challenge_target', target=ch.get('target_value', 0))} "
+                    f"{t('tray.alert.challenge_creator', score=ch.get('creator_score', 0))} vs "
+                    f"{t('tray.alert.challenge_opponent', score=ch.get('opponent_score', 0))}"
                 )
-            rumps.alert(title="⚔️ 挑战", message="\n".join(lines), ok="好的")
+            rumps.alert(title=t("tray.alert.challenges_title"), message="\n".join(lines), ok=t("btn.ok"))
         except Exception as e:
-            rumps.alert("挑战错误", str(e))
+            rumps.alert(t("tray.alert.challenge_error"), str(e))
 
     def _sync_now(self, _):
         if not self._sync_manager:
-            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            rumps.alert("Social", t("tray.alert.cloud_required"))
             return
         def do_sync():
             self._sync_manager.sync_once()
-            rumps.notification("Sit Monitor", "同步完成", "数据已上传到云端")
+            rumps.notification("Sit Monitor", t("tray.notify.sync_done"), t("tray.notify.sync_done_msg"))
         threading.Thread(target=do_sync, daemon=True).start()
 
     def _change_nickname(self, _):
         resp = rumps.Window(
-            title="修改昵称",
-            message="输入新昵称（2-20 个字符）",
+            title=t("tray.alert.nickname_title"),
+            message=t("tray.alert.nickname_msg"),
             default_text=self.settings.nickname,
-            ok="确定",
-            cancel="取消",
+            ok=t("btn.confirm"),
+            cancel=t("btn.cancel"),
         ).run()
         if resp.clicked and resp.text.strip():
             new_name = resp.text.strip()[:20]
             self.settings.nickname = new_name
             self.settings.save()
-            try:
-                self.menu["🌐 Social"][f"Nickname: {self.settings.nickname}"].title = f"Nickname: {new_name}"
-            except Exception:
-                pass
+            if self._mi_nickname:
+                self._mi_nickname.title = t("tray.menu.nickname", name=new_name)
             if self._cloud_client:
                 threading.Thread(
                     target=self._cloud_client.update_nickname,
@@ -614,31 +678,31 @@ class TrayApp(rumps.App):
         self.settings.share_posture = not self.settings.share_posture
         self.settings.share_exercise = self.settings.share_posture
         self.settings.save()
-        sender.title = f"{'☑' if self.settings.share_posture else '☐'} Share Data"
+        sender.title = f"{'☑' if self.settings.share_posture else '☐'} {t('tray.menu.share_data')}"
 
     # --- Battle ---
 
     def _quick_battle(self, _):
         """快速对战：从排行榜选择对手"""
         if not self._cloud_client:
-            rumps.alert("Battle", "请先开启 Enable Cloud")
+            rumps.alert("Battle", t("tray.alert.cloud_required_short"))
             return
         try:
             today = str(date.today())
             entries = self._cloud_client.leaderboard_daily(today)
             others = [e for e in entries if e.user_id != self._cloud_client.user_id]
             if not others:
-                rumps.alert("⚔️ 对战", "排行榜上没有其他用户，无法发起对战")
+                rumps.alert(t("tray.alert.battle_title"), t("tray.alert.battle_no_opponents"))
                 return
-            lines = ["选择对手（输入序号）："]
+            lines = [t("tray.alert.battle_select_opponent")]
             for i, e in enumerate(others[:10], 1):
-                lines.append(f"  {i}. {e.nickname} (良好率 {e.good_pct}%)")
+                lines.append(t("tray.alert.battle_opponent_entry", i=i, nickname=e.nickname, pct=e.good_pct))
             resp = rumps.Window(
-                title="⚔️ Quick Battle",
+                title=t("tray.alert.battle_title"),
                 message="\n".join(lines),
                 default_text="1",
-                ok="发起对战",
-                cancel="取消",
+                ok=t("btn.start_battle"),
+                cancel=t("btn.cancel"),
             ).run()
             if resp.clicked and resp.text.strip():
                 try:
@@ -647,24 +711,24 @@ class TrayApp(rumps.App):
                         opponent = others[idx]
                         result = self._cloud_client.create_battle(opponent.user_id)
                         if result:
-                            rumps.notification("Sit Monitor", "⚔️ 对战已发起",
-                                               f"向 {opponent.nickname} 发起了俯卧撑对战")
+                            rumps.notification("Sit Monitor", t("tray.notify.battle_created"),
+                                               t("tray.notify.battle_created_msg", nickname=opponent.nickname))
                         else:
-                            rumps.alert("对战", "创建对战失败")
+                            rumps.alert("Battle", t("tray.alert.battle_create_failed"))
                 except (ValueError, IndexError):
-                    rumps.alert("对战", "无效的选择")
+                    rumps.alert("Battle", t("tray.alert.battle_invalid_choice"))
         except Exception as e:
-            rumps.alert("对战错误", str(e))
+            rumps.alert(t("tray.alert.battle_error"), str(e))
 
     def _show_battles(self, _):
         """显示我的对战列表"""
         if not self._cloud_client:
-            rumps.alert("Battle", "请先开启 Enable Cloud")
+            rumps.alert("Battle", t("tray.alert.cloud_required_short"))
             return
         try:
             battles = self._cloud_client.list_my_battles()
             if not battles:
-                rumps.alert("⚔️ 对战", "暂无对战\n\n通过 Quick Battle 或 MCP 工具发起对战")
+                rumps.alert(t("tray.alert.my_battles_title"), t("tray.alert.no_battles"))
                 return
             lines = []
             uid = self._cloud_client.user_id
@@ -673,47 +737,39 @@ class TrayApp(rumps.App):
                     "invite": "📨", "accepted": "✅", "active": "🏃",
                     "finished": "🏁", "expired": "⏰", "cancelled": "❌",
                 }.get(b.get("status"), "?")
-                # 显示对手
                 is_creator = b.get("creator_id") == uid
-                role = "发起" if is_creator else "收到"
+                role = t("tray.alert.battle_role_creator") if is_creator else t("tray.alert.battle_role_opponent")
                 my_score = b.get("creator_score", 0) if is_creator else b.get("opponent_score", 0)
                 opp_score = b.get("opponent_score", 0) if is_creator else b.get("creator_score", 0)
                 winner = b.get("winner_id", "")
                 win_text = ""
                 if b.get("status") == "finished":
                     if winner == uid:
-                        win_text = " 🏆 胜"
+                        win_text = t("tray.alert.battle_win")
                     elif winner:
-                        win_text = " 败"
+                        win_text = t("tray.alert.battle_lose")
                     else:
-                        win_text = " 平"
+                        win_text = t("tray.alert.battle_draw")
                 lines.append(
                     f"{status_icon} [{role}] {b.get('status')} | "
-                    f"我:{my_score:.1f} vs 对手:{opp_score:.1f}{win_text}"
+                    f"{t('tray.alert.battle_score', my_score=my_score, opp_score=opp_score)}{win_text}"
                 )
-            rumps.alert(title="⚔️ 我的对战", message="\n".join(lines), ok="好的")
+            rumps.alert(title=t("tray.alert.my_battles_title"), message="\n".join(lines), ok=t("btn.ok"))
         except Exception as e:
-            rumps.alert("对战错误", str(e))
+            rumps.alert(t("tray.alert.battle_error"), str(e))
 
     # --- Account ---
 
     def _link_google(self, _):
         """绑定 Google 账号"""
         if not self._cloud_client:
-            rumps.alert("Account", "请先开启 Enable Cloud")
+            rumps.alert("Account", t("tray.alert.cloud_required_short"))
             return
-        # 提示用户绑定含义
         resp = rumps.alert(
-            title="🔗 绑定 Google 账号",
-            message=(
-                "绑定后：\n"
-                "• 您的坐姿和运动数据将与 Google 账号关联\n"
-                "• 可在多设备间同步数据\n"
-                "• 随时可以解绑恢复匿名\n\n"
-                "是否继续？"
-            ),
-            ok="继续绑定",
-            cancel="取消",
+            title=t("tray.alert.link_google_title"),
+            message=t("tray.alert.link_google_msg"),
+            ok=t("btn.continue_link"),
+            cancel=t("btn.cancel"),
         )
         if resp != 1:
             return
@@ -723,39 +779,37 @@ class TrayApp(rumps.App):
             if result.get("success"):
                 self.settings.auth_provider = "google"
                 self.settings.save()
-                try:
-                    self.menu["🔐 Account"]["Auth: device"].title = "Auth: google"
-                except Exception:
-                    pass
-                rumps.notification("Sit Monitor", "🔗 Google 账号已绑定", result.get("message", ""))
+                if self._mi_auth:
+                    self._mi_auth.title = t("tray.menu.auth_status", provider="google")
+                rumps.notification("Sit Monitor", t("tray.notify.google_linked"), result.get("message", ""))
             elif result.get("url"):
                 import webbrowser
                 webbrowser.open(result["url"])
-                rumps.notification("Sit Monitor", "🔗 请在浏览器中完成授权", "授权后将自动完成绑定")
+                rumps.notification("Sit Monitor", t("tray.notify.google_auth_pending"),
+                                   t("tray.notify.google_auth_pending_msg"))
             else:
-                rumps.alert("绑定失败", result.get("error", "未知错误"))
+                rumps.alert(t("tray.alert.link_failed"),
+                            result.get("error", t("tray.alert.link_unknown_error")))
         except Exception as e:
-            rumps.alert("绑定错误", str(e))
+            rumps.alert(t("tray.alert.link_error"), str(e))
 
     def _unlink_provider(self, _):
         """解绑社交账号"""
         if self.settings.auth_provider == "device":
-            rumps.alert("Account", "当前已是匿名（设备）认证")
+            rumps.alert("Account", t("tray.alert.already_anonymous"))
             return
         resp = rumps.alert(
-            title="🔓 解绑社交账号",
-            message=f"当前绑定: {self.settings.auth_provider}\n\n解绑后恢复匿名认证，历史数据保留。",
-            ok="确认解绑",
-            cancel="取消",
+            title=t("tray.alert.unlink_title"),
+            message=t("tray.alert.unlink_msg", provider=self.settings.auth_provider),
+            ok=t("btn.confirm_unlink"),
+            cancel=t("btn.cancel"),
         )
         if resp == 1:
             self.settings.auth_provider = "device"
             self.settings.save()
-            try:
-                self.menu["🔐 Account"][f"Auth: google"].title = "Auth: device"
-            except Exception:
-                pass
-            rumps.notification("Sit Monitor", "🔓 已解绑", "恢复匿名认证")
+            if self._mi_auth:
+                self._mi_auth.title = t("tray.menu.auth_status", provider="device")
+            rumps.notification("Sit Monitor", t("tray.notify.unlinked"), t("tray.notify.unlinked_msg"))
 
     def _check_achievements(self):
         """定时检查成就，解锁时发通知"""
@@ -764,8 +818,9 @@ class TrayApp(rumps.App):
         try:
             newly = self._achievement_engine.check_and_unlock()
             for a in newly:
-                rumps.notification("Sit Monitor", f"🎉 成就解锁: {a.icon} {a.name}", a.description)
-                # 上传到云端
+                rumps.notification("Sit Monitor",
+                                   t("tray.notify.achievement_unlocked", icon=a.icon, name=a.name),
+                                   a.description)
                 if self._cloud_client:
                     self._cloud_client.upload_achievement(a.id, self._achievement_engine._unlocked.get(a.id, ""))
             self._update_social_menu()
@@ -781,8 +836,8 @@ class TrayApp(rumps.App):
                 time.sleep(self._auto_update_hours * 3600)
                 self._silent_check_update()
 
-        t = threading.Thread(target=auto_check, daemon=True)
-        t.start()
+        _t = threading.Thread(target=auto_check, daemon=True)
+        _t.start()
 
     def _silent_check_update(self):
         """静默检查更新，有新版本时通知用户"""
@@ -794,12 +849,12 @@ class TrayApp(rumps.App):
             remote = subprocess.run(["git", "rev-parse", "origin/main"], cwd=PROJECT_DIR,
                                     capture_output=True, text=True).stdout.strip()
             if local != remote:
-                log = subprocess.run(
+                git_log = subprocess.run(
                     ["git", "log", f"{local}..{remote}", "--oneline"],
                     cwd=PROJECT_DIR, capture_output=True, text=True,
                 ).stdout.strip()
-                rumps.notification("Sit Monitor", "有新版本可用",
-                                   f"{log}\n点击菜单 Check for Updates 升级")
+                rumps.notification("Sit Monitor", t("tray.notify.update_available"),
+                                   t("tray.notify.update_available_msg", log=git_log))
         except Exception:
             pass
 
@@ -816,7 +871,7 @@ class TrayApp(rumps.App):
                                         capture_output=True, text=True).stdout.strip()
 
                 if local == remote:
-                    rumps.notification("Sit Monitor", "检查更新", "已是最新版本")
+                    rumps.notification("Sit Monitor", t("tray.menu.check_updates"), t("tray.notify.up_to_date"))
                     return
 
                 subprocess.run(["git", "pull", "origin", "main"], cwd=PROJECT_DIR,
@@ -832,13 +887,13 @@ class TrayApp(rumps.App):
                     subprocess.run(["uv", "pip", "install", "--python", python, "-r", req],
                                    capture_output=True, timeout=60)
 
-                log = subprocess.run(
+                git_log = subprocess.run(
                     ["git", "log", f"{local}..{remote}", "--oneline"],
                     cwd=PROJECT_DIR, capture_output=True, text=True,
                 ).stdout.strip()
 
-                rumps.notification("Sit Monitor", "更新完成，正在重启...",
-                                   log or "已拉取最新代码")
+                rumps.notification("Sit Monitor", t("tray.notify.update_done"),
+                                   git_log or "OK")
 
                 # 自动重启：停止监控后 re-exec
                 self._stop_monitor()
@@ -848,13 +903,11 @@ class TrayApp(rumps.App):
                 args = [python, script, "--tray"]
                 if self.debug:
                     args.append("--debug")
-                # 启动新进程
                 subprocess.Popen(args)
-                # 退出当前进程
                 rumps.quit_application()
 
             except Exception as e:
-                rumps.notification("Sit Monitor", "更新失败", str(e))
+                rumps.notification("Sit Monitor", t("tray.notify.update_failed"), str(e))
 
         threading.Thread(target=do_update, daemon=True).start()
 
@@ -871,16 +924,8 @@ class TrayApp(rumps.App):
 
         rumps.alert(
             title="Sit Monitor",
-            message=(
-                f"版本: v{VERSION}\n"
-                f"提交: {commit}\n\n"
-                "使用 MacBook 摄像头检测坐姿，\n"
-                "通过 MediaPipe Pose 实时分析\n"
-                "肩膀倾斜、头部前倾、躯干弯曲。\n\n"
-                f"GitHub: {REPO_URL}\n"
-                f"作者: Benjia Zou"
-            ),
-            ok="好的",
+            message=t("tray.alert.about_msg", version=VERSION, commit=commit, repo=REPO_URL),
+            ok=t("btn.ok"),
         )
 
     # --- Quit / Run ---
@@ -895,29 +940,26 @@ class TrayApp(rumps.App):
 
     def run(self):
         @rumps.timer(1)
-        def auto_start(t):
-            t.stop()
+        def auto_start(timer):
+            timer.stop()
             self._start_monitor()
-            try:
-                self.menu["Start Monitoring"].title = "Stop Monitoring"
-            except Exception:
-                pass
+            self._mi_start.title = t("tray.menu.stop_monitoring")
             # 初始化云端功能
             self._init_cloud()
 
         # 每 0.5 秒在主线程更新 UI
         @rumps.timer(0.5)
-        def ui_update(t):
-            self._poll_ui_update(t)
+        def ui_update(timer):
+            self._poll_ui_update(timer)
 
         # 每 60 秒检查是否需要发送每日报告
         @rumps.timer(60)
-        def daily_report_check(t):
-            self._check_daily_report(t)
+        def daily_report_check(timer):
+            self._check_daily_report(timer)
 
         # 每 30 分钟检查成就
         @rumps.timer(1800)
-        def achievement_check(t):
+        def achievement_check(timer):
             self._check_achievements()
 
         super().run()

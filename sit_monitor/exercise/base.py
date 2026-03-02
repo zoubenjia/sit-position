@@ -13,6 +13,7 @@ import cv2
 import mediapipe as mp
 
 from sit_monitor.exercise.voice_coach import VoiceCoach
+from sit_monitor.i18n import t
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
@@ -118,7 +119,7 @@ class ExerciseMonitor:
 
         cap = cv2.VideoCapture(self.camera)
         if not cap.isOpened():
-            print("错误: 无法打开摄像头")
+            print(t("exercise.camera_error"))
             return
 
         self.running = True
@@ -131,7 +132,7 @@ class ExerciseMonitor:
 
         try:
             # === 阶段一：就位引导 ===
-            print("📍 就位引导 — 请按语音提示操作")
+            print(t("exercise.position_guide"))
             positioned = False
             last_guidance_text = ""
 
@@ -173,8 +174,8 @@ class ExerciseMonitor:
                 if guidance is None:
                     positioned = True
                     analyzer.on_position_ready()
-                    coach.say("位置就绪，可以开始", priority=0, interrupt=True)
-                    print("\r✅ 位置就绪，开始训练！" + " " * 40)
+                    coach.say(t("exercise.position_ready_tts"), priority=0, interrupt=True)
+                    print("\r" + t("exercise.position_ready") + " " * 40)
                 else:
                     now = time.time()
                     status = f"📍 {guidance}"
@@ -204,8 +205,8 @@ class ExerciseMonitor:
 
             # === 阶段二：训练 ===
             coach.clear()  # 清空准备阶段残留的语音队列
-            coach.say("开始吧", priority=0)
-            print("🏋️ 训练中 — Ctrl+C 结束")
+            coach.say(t("exercise.start_tts"), priority=0)
+            print(t("exercise.training"))
             last_phase = None
             while self.running:
                 ret, frame = cap.read()
@@ -218,7 +219,7 @@ class ExerciseMonitor:
                 results = landmarker.detect(mp_image)
 
                 if not results.pose_landmarks:
-                    print(f"\r⏳ 未检测到人体，请回到画面中{'':>40}", end="", flush=True)
+                    print(f"\r{t('exercise.no_person'):>40}", end="", flush=True)
                     time.sleep(0.03)
                     continue
 
@@ -236,15 +237,13 @@ class ExerciseMonitor:
                 # 新的一次完成
                 if result.rep_count > last_rep_count:
                     count = result.rep_count
-                    count_words = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十",
-                                   "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                                   "二十一", "二十二", "二十三", "二十四", "二十五", "二十六", "二十七", "二十八", "二十九", "三十"]
+                    count_words = t("exercise.count_words").split(",")
                     word = count_words[count - 1] if count <= len(count_words) else str(count)
 
                     if count % 10 == 0:
-                        coach.say(f"{word}！做得好，继续", priority=0, category="count")
+                        coach.say(t("exercise.count_great", word=word), priority=0, category="count")
                     elif count % 5 == 0:
-                        coach.say(f"{word}！加油", priority=0, category="count")
+                        coach.say(t("exercise.count_good", word=word), priority=0, category="count")
                     else:
                         coach.say(word, priority=0, category="count")
 
@@ -269,7 +268,7 @@ class ExerciseMonitor:
                     RepPhase.DOWN: "🔽",
                 }
                 metrics_str = " | ".join(f"{k}:{v:.1f}" for k, v in result.metrics.items())
-                status = f"{phase_icon.get(result.phase, '?')} {result.phase.value} | 次数: {result.rep_count} | {metrics_str}"
+                status = f"{phase_icon.get(result.phase, '?')} {result.phase.value} | {t('exercise.rep_count', count=result.rep_count)} | {metrics_str}"
                 print(f"\r{status:<80}", end="", flush=True)
 
                 if self.debug:
@@ -295,18 +294,18 @@ class ExerciseMonitor:
                 form_errors=form_error_counts,
             )
 
-            summary_text = f"训练结束！共完成{total_reps}个{analyzer.exercise_name}"
+            summary_text = t("exercise.summary_tts", count=total_reps, name=analyzer.exercise_name)
             coach.say(summary_text, priority=0)
 
             print(f"\n\n{'=' * 40}")
-            print(f"🏋️ {analyzer.exercise_name}训练统计")
+            print(t("exercise.summary_title", name=analyzer.exercise_name))
             print(f"{'=' * 40}")
-            print(f"  完成次数: {total_reps}")
-            print(f"  训练时长: {duration:.0f} 秒")
+            print(t("exercise.summary_reps", count=total_reps))
+            print(t("exercise.summary_duration", seconds=duration))
             if form_error_counts:
-                print(f"  姿势纠正:")
+                print(t("exercise.summary_form"))
                 for cat, cnt in form_error_counts.items():
-                    print(f"    {cat}: {cnt} 次")
+                    print(t("exercise.summary_form_item", category=cat, count=cnt))
             print(f"{'=' * 40}")
 
             # 等待最后的语音播完
@@ -317,4 +316,4 @@ class ExerciseMonitor:
             cap.release()
             if self.debug:
                 cv2.destroyAllWindows()
-            print("已退出。")
+            print(t("exercise.exited"))

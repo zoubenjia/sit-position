@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from sit_monitor.cloud.models import Achievement
+from sit_monitor.i18n import t
 from sit_monitor.report import _read_events, daily_summary
 
 log = logging.getLogger(__name__)
@@ -18,80 +19,80 @@ ACHIEVEMENTS_STATE_PATH = os.path.join(SCRIPT_DIR, "logs", "achievements.json")
 ACHIEVEMENTS = [
     Achievement(
         id="first_day",
-        name="初次打卡",
-        description="首次使用坐姿监控一整天",
+        name="achievement.first_day.name",
+        description="achievement.first_day.desc",
         icon="🌟",
         condition_type="single_day",
         condition_value=1,
     ),
     Achievement(
         id="streak_3",
-        name="三日连胜",
-        description="连续 3 天良好率 ≥ 70%",
+        name="achievement.streak_3.name",
+        description="achievement.streak_3.desc",
         icon="🔥",
         condition_type="streak",
         condition_value=3,
     ),
     Achievement(
         id="streak_7",
-        name="周冠军",
-        description="连续 7 天良好率 ≥ 70%",
+        name="achievement.streak_7.name",
+        description="achievement.streak_7.desc",
         icon="👑",
         condition_type="streak",
         condition_value=7,
     ),
     Achievement(
         id="perfect_day",
-        name="完美一天",
-        description="某天良好率达到 95% 以上",
+        name="achievement.perfect_day.name",
+        description="achievement.perfect_day.desc",
         icon="💎",
         condition_type="single_day",
         condition_value=95,
     ),
     Achievement(
         id="hours_100",
-        name="百小时达人",
-        description="累计监控时长达到 100 小时",
+        name="achievement.hours_100.name",
+        description="achievement.hours_100.desc",
         icon="⏰",
         condition_type="cumulative",
         condition_value=6000,  # 100 小时 = 6000 分钟
     ),
     Achievement(
         id="first_like",
-        name="社交蝴蝶",
-        description="首次给别人点赞",
+        name="achievement.first_like.name",
+        description="achievement.first_like.desc",
         icon="🦋",
         condition_type="action_count",
         condition_value=1,
     ),
     Achievement(
         id="early_bird",
-        name="早起鸟儿",
-        description="在早上 7 点前开始监控",
+        name="achievement.early_bird.name",
+        description="achievement.early_bird.desc",
         icon="🐦",
         condition_type="single_day",
         condition_value=7,  # 7 点
     ),
     Achievement(
         id="first_battle",
-        name="初次对战",
-        description="完成第一场俯卧撑对战",
+        name="achievement.first_battle.name",
+        description="achievement.first_battle.desc",
         icon="⚔️",
         condition_type="action_count",
         condition_value=1,
     ),
     Achievement(
         id="battle_winner",
-        name="胜利者",
-        description="赢得一场俯卧撑对战",
+        name="achievement.battle_winner.name",
+        description="achievement.battle_winner.desc",
         icon="🏆",
         condition_type="action_count",
         condition_value=1,
     ),
     Achievement(
         id="battle_streak_3",
-        name="三连胜",
-        description="连续赢得 3 场俯卧撑对战",
+        name="achievement.battle_streak_3.name",
+        description="achievement.battle_streak_3.desc",
         icon="🔥",
         condition_type="streak",
         condition_value=3,
@@ -139,8 +140,8 @@ class AchievementEngine:
         for a in ACHIEVEMENTS:
             result.append({
                 "id": a.id,
-                "name": a.name,
-                "description": a.description,
+                "name": t(a.name),
+                "description": t(a.description),
                 "icon": a.icon,
                 "unlocked": a.id in self._unlocked,
                 "unlocked_at": self._unlocked.get(a.id, ""),

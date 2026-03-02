@@ -12,6 +12,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from sit_monitor.i18n import t
+
 log = logging.getLogger(__name__)
 
 
@@ -37,8 +39,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         # 验证 state 参数
         state = params.get("state", [""])[0]
         if state != expected_state:
-            result.error = "state 参数不匹配，可能遭到 CSRF 攻击"
-            self._send_response("授权失败：安全验证失败", 400)
+            result.error = t("oauth.csrf_error")
+            self._send_response(t("oauth.auth_security_fail"), 400)
             result.ready.set()
             return
 
@@ -47,7 +49,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         if error:
             desc = params.get("error_description", [error])[0]
             result.error = desc
-            self._send_response(f"授权失败：{desc}", 400)
+            self._send_response(t("oauth.auth_failed_desc", desc=desc), 400)
             result.ready.set()
             return
 
@@ -60,7 +62,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             return
 
         result.code = code
-        self._send_response("授权成功！可以关闭此页面。", 200)
+        self._send_response(t("oauth.auth_success"), 200)
         result.ready.set()
 
     def do_POST(self):
@@ -73,16 +75,17 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         access_token = params.get("access_token", [""])[0]
         if access_token:
             result.code = f"token:{access_token}"
-            self._send_response("授权成功！", 200)
+            self._send_response(t("oauth.auth_success_short"), 200)
         else:
-            result.error = "未收到 access_token"
-            self._send_response("授权失败", 400)
+            result.error = t("oauth.no_token")
+            self._send_response(t("oauth.auth_failed"), 400)
         result.ready.set()
 
     def _send_response(self, message: str, status: int):
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
+        close_hint = t("oauth.close_page")
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
         <title>Sit Monitor - OAuth</title>
         <style>body{{font-family:system-ui;display:flex;justify-content:center;
@@ -90,7 +93,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         .card{{background:white;padding:2rem;border-radius:1rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);
         text-align:center;max-width:400px}}</style></head>
         <body><div class="card"><h2>{"✅" if status == 200 else "❌"} {message}</h2>
-        <p>可以关闭此页面返回 Sit Monitor</p></div></body></html>"""
+        <p>{close_hint}</p></div></body></html>"""
         self.wfile.write(html.encode())
 
     def _send_fragment_extractor(self):
@@ -98,19 +101,22 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
-        html = """<!DOCTYPE html><html><head><meta charset="utf-8">
+        completing = t("oauth.completing")
+        js_success = t("oauth.js_success")
+        js_error = t("oauth.js_error")
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
         <title>Sit Monitor - OAuth</title></head><body>
-        <p>正在完成授权...</p>
+        <p>{completing}</p>
         <script>
         const hash = window.location.hash.substring(1);
-        if (hash) {
-            fetch(window.location.pathname, {method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        if (hash) {{
+            fetch(window.location.pathname, {{method: 'POST',
+                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
                 body: hash
-            }).then(() => document.body.innerHTML = '<h2>✅ 授权成功！可以关闭此页面。</h2>');
-        } else {
-            document.body.innerHTML = '<h2>❌ 未收到授权信息</h2>';
-        }
+            }}).then(() => document.body.innerHTML = '<h2>{js_success}</h2>');
+        }} else {{
+            document.body.innerHTML = '<h2>{js_error}</h2>';
+        }}
         </script></body></html>"""
         self.wfile.write(html.encode())
 

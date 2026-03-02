@@ -3,6 +3,8 @@
 import re
 import subprocess
 
+from sit_monitor.i18n import t
+
 # --------------- 通知 ---------------
 
 def send_notification(title, message, sound=False, use_notification_center=False):
@@ -13,15 +15,17 @@ def send_notification(title, message, sound=False, use_notification_center=False
     if use_notification_center:
         script = f'display notification "{safe_msg}" with title "{safe_title}"'
     else:
+        btn_text = t("btn.ok")
         script = (
             f'display dialog "{safe_msg}" with title "{safe_title}" '
-            f'buttons {{"好的"}} default button 1 giving up after 10'
+            f'buttons {{"{btn_text}"}} default button 1 giving up after 10'
         )
     subprocess.Popen(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if sound:
-        speech = message.replace("\n", "，")
-        return subprocess.Popen(["say", "-v", "Tingting", speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        voice = t("platform.tts_voice")
+        speech = message.replace("\n", "，" if voice == "Tingting" else ", ")
+        return subprocess.Popen(["say", "-v", voice, speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return None
 
 
