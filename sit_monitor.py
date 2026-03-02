@@ -2,19 +2,95 @@
 """坐姿监控程序 - 使用 MacBook 摄像头检测不良坐姿并发送系统通知"""
 
 import argparse
+import json
+import logging
 import math
 import os
 import signal
 import subprocess
 import sys
 import time
+from datetime import datetime
 
 import cv2
 import mediapipe as mp
 import numpy as np
 
 # 模型文件路径（与脚本同目录）
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pose_landmarker_lite.task")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
+LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+
+
+def setup_logging():
+    """配置结构化日志，写入 logs/posture.jsonl"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    logger = logging.getLogger("posture")
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(os.path.join(LOG_DIR, "posture.jsonl"), encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    return logger
+
+
+def log_event(logger, event_type, **kwargs):
+    """写入一条 JSON 日志"""
+    record = {"ts": datetime.now().isoformat(), "event": event_type, **kwargs}
+    logger.info(json.dumps(record, ensure_ascii=False))
+
+
+class Stats:
+    """运行期间的统计计数器"""
+    def __init__(self):
+        self.start_time = time.time()
+        self.total_checks = 0
+        self.good_count = 0
+        self.bad_count = 0
+        self.no_person_count = 0
+        self.notifications_sent = 0
+        self.sit_notifications_sent = 0
+        self.bad_seconds_total = 0.0
+        self.good_seconds_total = 0.0
+        self._last_state = None  # "good" / "bad" / None
+        self._last_state_time = None
+
+    def record(self, state, now):
+        """记录一次检测结果，state: 'good'/'bad'/'away'"""
+        self.total_checks += 1
+        if state == "good":
+            self.good_count += 1
+        elif state == "bad":
+            self.bad_count += 1
+        else:
+            self.no_person_count += 1
+
+        # 累计好/坏姿势持续时长
+        if self._last_state in ("good", "bad") and self._last_state_time:
+            dt = now - self._last_state_time
+            if self._last_state == "good":
+                self.good_seconds_total += dt
+            else:
+                self.bad_seconds_total += dt
+
+        self._last_state = state
+        self._last_state_time = now
+
+    def summary(self):
+        """返回统计摘要字符串"""
+        elapsed = time.time() - self.start_time
+        mins = elapsed / 60
+        bad_pct = (self.bad_seconds_total / (self.good_seconds_total + self.bad_seconds_total) * 100
+                   if (self.good_seconds_total + self.bad_seconds_total) > 0 else 0)
+        lines = [
+            f"运行时长: {mins:.1f} 分钟",
+            f"总检测次数: {self.total_checks}",
+            f"  姿势良好: {self.good_count} 次 ({self.good_seconds_total/60:.1f} 分钟)",
+            f"  姿势不良: {self.bad_count} 次 ({self.bad_seconds_total/60:.1f} 分钟, {bad_pct:.0f}%)",
+            f"  人不在位: {self.no_person_count} 次",
+            f"坐姿提醒: {self.notifications_sent} 次",
+            f"久坐提醒: {self.sit_notifications_sent} 次",
+        ]
+        return "\n".join(lines)
 
 # 关键点索引（新 API 使用整数索引）
 PoseLandmark = mp.tasks.vision.PoseLandmark
@@ -36,9 +112,10 @@ def parse_args():
     p.add_argument("--auto-pause", action="store_true", help="人离开时自动暂停视频，回来时恢复")
     p.add_argument("--away-seconds", type=float, default=3.0, help="离开多少秒后暂停 (默认: 3)")
     p.add_argument("--browser", type=str, default=None, help="浏览器名称 (默认: 自动检测，支持 Firefox/Chrome/Safari/Arc)")
-    p.add_argument("--shoulder-threshold", type=float, default=10.0, help="肩膀倾斜角阈值/度 (默认: 10)")
-    p.add_argument("--neck-threshold", type=float, default=15.0, help="头部前倾角阈值/度 (默认: 15)")
-    p.add_argument("--torso-threshold", type=float, default=8.0, help="躯干前倾角阈值/度 (默认: 8)")
+    p.add_argument("--shoulder-threshold", type=float, default=7.0, help="肩膀倾斜角阈值/度 (默认: 7)")
+    p.add_argument("--neck-threshold", type=float, default=10.0, help="头部前倾角阈值/度 (默认: 10)")
+    p.add_argument("--torso-threshold", type=float, default=5.0, help="躯干前倾角阈值/度 (默认: 5)")
+    p.add_argument("--sit-max-minutes", type=int, default=45, help="连续就坐多少分钟后提醒休息 (默认: 45)")
     return p.parse_args()
 
 
@@ -240,6 +317,11 @@ def main():
         "torso": args.torso_threshold,
     }
 
+    # 初始化日志和统计
+    logger = setup_logging()
+    stats = Stats()
+    log_event(logger, "start", thresholds=thresholds, sit_max_minutes=args.sit_max_minutes)
+
     # 检查模型文件
     if not os.path.exists(MODEL_PATH):
         print(f"错误: 未找到模型文件 {MODEL_PATH}")
@@ -275,6 +357,8 @@ def main():
     last_check_time = 0
     away_start_time = None
     media_paused = False
+    sit_start_time = None       # 连续就坐开始时间
+    last_sit_notify_time = 0    # 上次久坐提醒时间
     cap = None
     camera_retry_interval = 5  # 摄像头被占用时每隔几秒重试
 
@@ -330,6 +414,10 @@ def main():
 
             if not person_present:
                 bad_start_time = None
+                stats.record("away", now)
+                # 离开超过 1 分钟视为真正休息，重置久坐计时
+                if away_start_time is not None and (now - away_start_time) >= 60:
+                    sit_start_time = None
 
                 if args.auto_pause:
                     if away_start_time is None:
@@ -342,6 +430,8 @@ def main():
                     else:
                         status_line = f"未检测到人体 ({away_duration:.0f}s)"
                 else:
+                    if away_start_time is None:
+                        away_start_time = now
                     status_line = "未检测到人体"
             else:
                 if args.auto_pause and media_paused:
@@ -349,9 +439,33 @@ def main():
                     media_paused = False
                 away_start_time = None
 
+                # 久坐计时
+                if sit_start_time is None:
+                    sit_start_time = now
+                sit_minutes = (now - sit_start_time) / 60
+
+                # 久坐提醒：每到一个周期提醒一次
+                sit_max_seconds = args.sit_max_minutes * 60
+                if (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
+                    send_notification("久坐提醒", f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下吧！")
+                    log_event(logger, "sit_alert", sit_minutes=round(sit_minutes, 1))
+                    stats.sit_notifications_sent += 1
+                    last_sit_notify_time = now
+
                 lm = results.pose_landmarks[0]
                 is_bad, details, reasons = evaluate_posture(lm, thresholds)
 
+                # 记录日志和统计
+                log_data = {k: round(v, 1) if v is not None else None for k, v in details.items()}
+                log_data["sit_minutes"] = round(sit_minutes, 1)
+                if is_bad:
+                    stats.record("bad", now)
+                    log_event(logger, "bad", reasons=[r for r in reasons], **log_data)
+                else:
+                    stats.record("good", now)
+                    log_event(logger, "good", **log_data)
+
+                # 坏姿势也可能是坐太久导致的，加入提示
                 if is_bad:
                     if bad_start_time is None:
                         bad_start_time = now
@@ -359,18 +473,22 @@ def main():
 
                     if bad_duration >= args.bad_seconds and (now - last_notify_time) >= args.cooldown:
                         msg = "、".join(reasons)
+                        if sit_minutes >= args.sit_max_minutes:
+                            msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来休息）"
                         send_notification("坐姿提醒", f"请调整姿势：{msg}")
+                        log_event(logger, "posture_alert", reasons=[r for r in reasons], sit_minutes=round(sit_minutes, 1))
+                        stats.notifications_sent += 1
                         last_notify_time = now
                         bad_start_time = now
 
                     status_line = (
-                        f"⚠ 坏姿势 {bad_duration:.0f}s | "
+                        f"⚠ 坏姿势 {bad_duration:.0f}s | 就坐 {sit_minutes:.0f}min | "
                         + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                     )
                 else:
                     bad_start_time = None
                     status_line = (
-                        "✓ 姿势良好 | "
+                        f"✓ 姿势良好 | 就坐 {sit_minutes:.0f}min | "
                         + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                     )
 
@@ -385,7 +503,24 @@ def main():
                     break
 
     finally:
-        print("\n正在退出...")
+        # 最后一次统计更新
+        stats.record(None, time.time())
+        summary = stats.summary()
+        log_event(logger, "stop",
+                  total_checks=stats.total_checks,
+                  good_count=stats.good_count,
+                  bad_count=stats.bad_count,
+                  good_minutes=round(stats.good_seconds_total / 60, 1),
+                  bad_minutes=round(stats.bad_seconds_total / 60, 1),
+                  notifications=stats.notifications_sent,
+                  sit_notifications=stats.sit_notifications_sent)
+
+        print("\n\n" + "=" * 40)
+        print("📊 本次坐姿监控统计")
+        print("=" * 40)
+        print(summary)
+        print("=" * 40)
+
         landmarker.close()
         if cap is not None:
             cap.release()
