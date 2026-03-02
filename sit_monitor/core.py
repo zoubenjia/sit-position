@@ -91,11 +91,13 @@ class PostureMonitor:
 
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
+        present_streak = 0  # 连续 person_present 帧计数，用于媒体恢复防抖
         last_notify_time = 0
         _say_proc = None  # 跟踪当前 say 进程，用于离开时停止语音
         last_check_time = 0
         away_start_time = None
         media_paused = False
+        last_media_toggle_time = 0  # 媒体切换冷却
         sit_start_time = None
         last_sit_notify_time = 0
         cap = None
@@ -161,12 +163,16 @@ class PostureMonitor:
                 # 是否使用 Notification Center（托盘模式下用横幅）
                 use_nc = self.on_state_change is not None
 
+                MEDIA_TOGGLE_COOLDOWN = 30  # 媒体切换至少间隔 30 秒
+                PRESENT_STREAK_REQUIRED = 2  # 回来后连续检测到 2 次才恢复播放
+
                 if not person_present:
                     # 人走开了，停止正在播放的提醒语音
                     if _say_proc and _say_proc.poll() is None:
                         _say_proc.terminate()
                         _say_proc = None
                     bad_start_time = None
+                    present_streak = 0
                     self.stats.record("away", now)
 
                     if away_start_time is not None and (now - away_start_time) >= 60:
@@ -176,9 +182,13 @@ class PostureMonitor:
                         if away_start_time is None:
                             away_start_time = now
                         away_duration = now - away_start_time
-                        if not media_paused and away_duration >= s.away_seconds:
-                            media_play_pause(s.browser or None)
-                            media_paused = True
+                        if (not media_paused
+                                and away_duration >= s.away_seconds
+                                and (now - last_media_toggle_time) >= MEDIA_TOGGLE_COOLDOWN):
+                            last_media_toggle_time = now  # 不管成败都更新，避免反复重试
+                            if media_play_pause(s.browser or None):
+                                media_paused = True
+                        if media_paused:
                             status_line = f"⏸ 已暂停播放（离开 {away_duration:.0f}s）"
                         else:
                             status_line = f"未检测到人体 ({away_duration:.0f}s)"
@@ -189,8 +199,12 @@ class PostureMonitor:
 
                     self._notify_state("away")
                 else:
-                    if s.auto_pause and media_paused:
-                        media_play_pause(s.browser or None)
+                    present_streak += 1
+                    if (s.auto_pause and media_paused
+                            and present_streak >= PRESENT_STREAK_REQUIRED
+                            and (now - last_media_toggle_time) >= MEDIA_TOGGLE_COOLDOWN):
+                        if media_play_pause(s.browser or None):
+                            last_media_toggle_time = now
                         media_paused = False
                     # 从离开状态回来：重置 cooldown，让提醒立即生效
                     if away_start_time is not None and (now - away_start_time) >= s.away_seconds:
