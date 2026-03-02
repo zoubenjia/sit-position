@@ -14,6 +14,7 @@ class Settings:
     shoulder_threshold: float = 10.0
     neck_threshold: float = 20.0
     torso_threshold: float = 8.0
+    head_tilt_threshold: float = 8.0
     interval: float = 5.0
     bad_seconds: int = 30
     cooldown: int = 180
@@ -43,6 +44,7 @@ class Settings:
             "shoulder": self.shoulder_threshold,
             "neck": self.neck_threshold,
             "torso": self.torso_threshold,
+            "head_tilt": self.head_tilt_threshold,
         }
 
     def save(self, path=None):

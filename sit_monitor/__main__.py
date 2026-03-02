@@ -1,6 +1,7 @@
 """python -m sit_monitor 入口"""
 
 import argparse
+import os
 import signal
 import sys
 
@@ -8,8 +9,8 @@ import sys
 def parse_args():
     p = argparse.ArgumentParser(description="坐姿监控 & 运动指导")
     p.add_argument("mode", nargs="?", default="posture",
-                   choices=["posture", "pushup"],
-                   help="运行模式: posture=坐姿监控(默认), pushup=俯卧撑训练")
+                   choices=["posture", "pushup", "preview"],
+                   help="运行模式: posture=坐姿监控(默认), pushup=俯卧撑训练, preview=摄像头预览")
     p.add_argument("--camera", type=int, default=0, help="摄像头索引 (默认: 0)")
     p.add_argument("--interval", type=float, default=5.0, help="检测间隔/秒 (默认: 5.0)")
     p.add_argument("--bad-seconds", type=int, default=30, help="连续坏姿势多少秒后通知 (默认: 30)")
@@ -107,11 +108,75 @@ def _run_exercise(args):
     monitor.run()
 
 
+def _run_preview(args):
+    """摄像头预览模式：显示骨架叠加和姿势角度，不做监控提醒"""
+    import cv2
+    import mediapipe as mp_lib
+
+    from sit_monitor.debug import draw_debug
+    from sit_monitor.posture import evaluate_posture
+    from sit_monitor.settings import Settings
+
+    settings = Settings.load()
+    model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "pose_landmarker_lite.task")
+
+    base_options = mp_lib.tasks.BaseOptions(model_asset_path=model_path)
+    options = mp_lib.tasks.vision.PoseLandmarkerOptions(
+        base_options=base_options,
+        running_mode=mp_lib.tasks.vision.RunningMode.IMAGE,
+        min_pose_detection_confidence=0.5,
+        min_pose_presence_confidence=0.5,
+        min_tracking_confidence=0.5,
+        num_poses=1,
+    )
+    landmarker = mp_lib.tasks.vision.PoseLandmarker.create_from_options(options)
+    cap = cv2.VideoCapture(args.camera)
+
+    if not cap.isOpened():
+        print("错误: 无法打开摄像头")
+        sys.exit(1)
+
+    print("摄像头预览已启动，按 q 退出")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp_lib.Image(image_format=mp_lib.ImageFormat.SRGB, data=rgb)
+        results = landmarker.detect(mp_image)
+
+        if results.pose_landmarks:
+            lm = results.pose_landmarks[0]
+            # 显示肩膀可见度（方便调试离开检测）
+            ls_vis = lm[mp_lib.tasks.vision.PoseLandmark.LEFT_SHOULDER].visibility
+            rs_vis = lm[mp_lib.tasks.vision.PoseLandmark.RIGHT_SHOULDER].visibility
+            is_bad, details, reasons = evaluate_posture(lm, settings.thresholds)
+            draw_debug(frame, lm, is_bad, details)
+            h = frame.shape[0]
+            cv2.putText(frame, f"L_shoulder vis: {ls_vis:.2f}  R_shoulder vis: {rs_vis:.2f}",
+                        (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1)
+        else:
+            cv2.putText(frame, "No person detected", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+
+        cv2.imshow("Sit Monitor - Preview (press q to quit)", frame)
+        if cv2.waitKey(30) & 0xFF == ord("q"):
+            break
+
+    landmarker.close()
+    cap.release()
+    cv2.destroyAllWindows()
+
+
 def main():
     args = parse_args()
 
     if args.mode == "posture":
         _run_posture(args)
+    elif args.mode == "preview":
+        _run_preview(args)
     else:
         _run_exercise(args)
 

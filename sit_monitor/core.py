@@ -92,6 +92,7 @@ class PostureMonitor:
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
         last_notify_time = 0
+        _say_proc = None  # 跟踪当前 say 进程，用于离开时停止语音
         last_check_time = 0
         away_start_time = None
         media_paused = False
@@ -150,12 +151,21 @@ class PostureMonitor:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 results = landmarker.detect(mp_image)
-                person_present = bool(results.pose_landmarks)
+                person_present = False
+                if results.pose_landmarks:
+                    _lm = results.pose_landmarks[0]
+                    _ls_vis = _lm[mp.tasks.vision.PoseLandmark.LEFT_SHOULDER].visibility
+                    _rs_vis = _lm[mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER].visibility
+                    person_present = _ls_vis >= 0.65 and _rs_vis >= 0.65
 
                 # 是否使用 Notification Center（托盘模式下用横幅）
                 use_nc = self.on_state_change is not None
 
                 if not person_present:
+                    # 人走开了，停止正在播放的提醒语音
+                    if _say_proc and _say_proc.poll() is None:
+                        _say_proc.terminate()
+                        _say_proc = None
                     bad_start_time = None
                     self.stats.record("away", now)
 
@@ -182,6 +192,10 @@ class PostureMonitor:
                     if s.auto_pause and media_paused:
                         media_play_pause(s.browser or None)
                         media_paused = False
+                    # 从离开状态回来：重置 cooldown，让提醒立即生效
+                    if away_start_time is not None and (now - away_start_time) >= s.away_seconds:
+                        last_notify_time = 0
+                        bad_start_time = None
                     away_start_time = None
 
                     if sit_start_time is None:
@@ -191,7 +205,7 @@ class PostureMonitor:
                     sit_max_seconds = s.sit_max_minutes * 60
                     snoozed = now < self.snooze_until
                     if not snoozed and (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
-                        send_notification(
+                        _say_proc = send_notification(
                             "久坐提醒",
                             f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下、喝杯水吧！",
                             sound=s.sound,
@@ -226,7 +240,7 @@ class PostureMonitor:
                             msg = "、".join(reasons)
                             if sit_minutes >= s.sit_max_minutes:
                                 msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来活动、喝杯水）"
-                            send_notification(
+                            _say_proc = send_notification(
                                 "坐姿提醒",
                                 f"请纠正姿势：{msg}",
                                 sound=s.sound,

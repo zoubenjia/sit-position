@@ -43,6 +43,7 @@ class TrayApp(rumps.App):
         self._preview_proc = None
         self._state = "stopped"
         self._details = {}
+        self._ui_dirty = False
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         # Cloud
@@ -135,11 +136,19 @@ class TrayApp(rumps.App):
     # --- 状态回调 ---
 
     def _on_state_change(self, state, details):
+        # 只存数据，不直接操作 AppKit（此回调在监控线程中运行）
         self._state = state
         self._details = details
-        self._set_icon(state)
+        self._ui_dirty = True
+
+    def _poll_ui_update(self, _):
+        """主线程定时器：安全地更新 UI"""
+        if not self._ui_dirty:
+            return
+        self._ui_dirty = False
+        self._set_icon(self._state)
         self._update_stats_menu()
-        self._update_posture_hint(state, details)
+        self._update_posture_hint(self._state, self._details)
 
     def _update_posture_hint(self, state, details):
         """实时更新菜单顶部的姿势提示"""
@@ -278,15 +287,6 @@ class TrayApp(rumps.App):
             self._start_preview(sender)
 
     def _start_preview(self, sender):
-        # 暂停坐姿监控（避免抢摄像头）
-        self._preview_was_monitoring = self._is_running()
-        if self._preview_was_monitoring:
-            self._stop_monitor()
-            try:
-                self.menu["Start Monitoring"].title = "Start Monitoring"
-            except Exception:
-                pass
-
         python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
         args = [python, "-m", "sit_monitor", "preview",
                 "--camera", str(self.settings.camera)]
@@ -297,13 +297,6 @@ class TrayApp(rumps.App):
             self._preview_proc.wait()
             sender.title = "📷 Show Camera"
             self._preview_proc = None
-            # 恢复坐姿监控
-            if self._preview_was_monitoring:
-                self._start_monitor()
-                try:
-                    self.menu["Start Monitoring"].title = "Stop Monitoring"
-                except Exception:
-                    pass
 
         threading.Thread(target=wait_and_cleanup, daemon=True).start()
 
@@ -685,6 +678,11 @@ class TrayApp(rumps.App):
                 pass
             # 初始化云端功能
             self._init_cloud()
+
+        # 每 0.5 秒在主线程更新 UI
+        @rumps.timer(0.5)
+        def ui_update(t):
+            self._poll_ui_update(t)
 
         # 每 60 秒检查是否需要发送每日报告
         @rumps.timer(60)

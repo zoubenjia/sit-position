@@ -5,7 +5,7 @@ import subprocess
 # --------------- 通知 ---------------
 
 def send_notification(title, message, sound=False, use_notification_center=False):
-    """发送通知。use_notification_center=True 时使用 Notification Center 横幅，否则用 dialog 弹窗。"""
+    """发送通知。返回 say 进程（如有），供调用方跟踪和终止。"""
     safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
     safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
 
@@ -20,7 +20,8 @@ def send_notification(title, message, sound=False, use_notification_center=False
 
     if sound:
         speech = message.replace("\n", "，")
-        subprocess.Popen(["say", "-v", "Tingting", speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return subprocess.Popen(["say", "-v", "Tingting", speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return None
 
 
 # --------------- 媒体播放控制 ---------------
@@ -37,8 +38,9 @@ def _detect_browser():
         capture_output=True, text=True,
     )
     running = result.stdout.strip()
+    running_lower = running.lower()
     for b in _BROWSERS:
-        if b in running:
+        if b.lower() in running_lower:
             return b
     return None
 
