@@ -2,3 +2,4 @@ mediapipe
 opencv-python
 numpy
 rumps
+mcp>=1.0.0
