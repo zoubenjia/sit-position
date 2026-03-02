@@ -116,6 +116,7 @@ def parse_args():
     p.add_argument("--neck-threshold", type=float, default=10.0, help="头部前倾角阈值/度 (默认: 10)")
     p.add_argument("--torso-threshold", type=float, default=5.0, help="躯干前倾角阈值/度 (默认: 5)")
     p.add_argument("--sit-max-minutes", type=int, default=45, help="连续就坐多少分钟后提醒休息 (默认: 45)")
+    p.add_argument("--sound", action="store_true", help="启用语音播报提醒")
     return p.parse_args()
 
 
@@ -197,8 +198,8 @@ def evaluate_posture(landmarks, thresholds):
 
 # --------------- macOS 通知 ---------------
 
-def send_notification(title, message):
-    """通过 osascript 弹窗提醒，10 秒后自动关闭"""
+def send_notification(title, message, sound=False):
+    """通过 osascript 弹窗提醒，10 秒后自动关闭。可选语音播报。"""
     safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
     safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
     script = (
@@ -206,6 +207,10 @@ def send_notification(title, message):
         f'buttons {{"好的"}} default button 1 giving up after 10'
     )
     subprocess.Popen(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sound:
+        # 先播系统提示音，再语音播报内容（去掉换行符）
+        speech = message.replace("\n", "，")
+        subprocess.Popen(["say", "-v", "Tingting", speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # --------------- 媒体播放控制 ---------------
@@ -447,7 +452,7 @@ def main():
                 # 久坐提醒：每到一个周期提醒一次
                 sit_max_seconds = args.sit_max_minutes * 60
                 if (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
-                    send_notification("久坐提醒", f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下吧！")
+                    send_notification("久坐提醒", f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下吧！", sound=args.sound)
                     log_event(logger, "sit_alert", sit_minutes=round(sit_minutes, 1))
                     stats.sit_notifications_sent += 1
                     last_sit_notify_time = now
@@ -475,7 +480,7 @@ def main():
                         msg = "、".join(reasons)
                         if sit_minutes >= args.sit_max_minutes:
                             msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来休息）"
-                        send_notification("坐姿提醒", f"请调整姿势：{msg}")
+                        send_notification("坐姿提醒", f"请调整姿势：{msg}", sound=args.sound)
                         log_event(logger, "posture_alert", reasons=[r for r in reasons], sit_minutes=round(sit_minutes, 1))
                         stats.notifications_sent += 1
                         last_notify_time = now
