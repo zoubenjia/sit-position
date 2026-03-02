@@ -5,3 +5,4 @@ logs/
 pose_landmarker_lite.task
 CLAUDE.md
 CLAUDE.md.backup.*
+settings.json

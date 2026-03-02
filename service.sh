@@ -52,7 +52,7 @@ do_install() {
 $MARKER
 if command -v tmux &>/dev/null && [ -z "\${TMUX:-}" ]; then
     tmux has-session -t $SESSION 2>/dev/null || \
-        tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --auto-pause >> $LOG_DIR/sit-monitor.log 2>&1"
+        tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --tray >> $LOG_DIR/sit-monitor.log 2>&1"
 fi
 EOF
 
@@ -78,7 +78,7 @@ do_start() {
         echo "已在运行中"
         return
     fi
-    tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --auto-pause >> $LOG_DIR/sit-monitor.log 2>&1"
+    tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --tray >> $LOG_DIR/sit-monitor.log 2>&1"
     echo "已启动 (tmux session: $SESSION)"
 }
 
