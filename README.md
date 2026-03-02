@@ -64,12 +64,12 @@
 
 ## 快速开始
 
-**没装 Git？** 直接[下载 ZIP](https://gitee.com/zoubenjia/sit-position/repository/archive/main.zip)，解压后进入文件夹运行 setup 即可。
+**没装 Git？** 直接[下载 ZIP](https://github.com/zoubenjia/sit-position/archive/refs/heads/main.zip)，解压后进入文件夹运行 setup 即可。
 
 ### macOS
 
 ```bash
-git clone https://gitee.com/zoubenjia/sit-position.git
+git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
 bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
@@ -77,7 +77,7 @@ bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ### Windows
 
 ```powershell
-git clone https://gitee.com/zoubenjia/sit-position.git
+git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
 powershell -ExecutionPolicy Bypass -File setup.ps1    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
