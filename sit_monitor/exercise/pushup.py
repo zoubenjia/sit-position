@@ -137,7 +137,13 @@ class PushupAnalyzer(ExerciseAnalyzer):
     exercise_name = "俯卧撑"
     exercise_id = "pushup"
 
-    def __init__(self):
+    def __init__(self, elbow_down=ELBOW_DOWN_THRESHOLD, elbow_up=ELBOW_UP_THRESHOLD,
+                 hip_threshold=HIP_SAG_THRESHOLD, depth_threshold=ELBOW_SHALLOW_THRESHOLD):
+        self.elbow_down = elbow_down
+        self.elbow_up = elbow_up
+        self.hip_sag = hip_threshold
+        self.hip_pike = -hip_threshold
+        self.depth_threshold = depth_threshold
         self.reset()
 
     def reset(self):
@@ -273,16 +279,16 @@ class PushupAnalyzer(ExerciseAnalyzer):
 
         elif self.phase == RepPhase.READY or self.phase == RepPhase.UP:
             self._min_elbow_in_rep = min(self._min_elbow_in_rep, elbow)
-            if elbow < ELBOW_DOWN_THRESHOLD:
+            if elbow < self.elbow_down:
                 self.phase = RepPhase.DOWN
                 self._min_elbow_in_rep = min(self._min_elbow_in_rep, elbow)
 
         elif self.phase == RepPhase.DOWN:
             self._min_elbow_in_rep = min(self._min_elbow_in_rep, elbow)
-            if elbow > ELBOW_UP_THRESHOLD:
+            if elbow > self.elbow_up:
                 self.rep_count += 1
 
-                if self._min_elbow_in_rep > ELBOW_SHALLOW_THRESHOLD:
+                if self._min_elbow_in_rep > self.depth_threshold:
                     feedbacks.append(("shallow", "再低一点，手臂弯到九十度"))
 
                 self.phase = RepPhase.UP
@@ -290,9 +296,9 @@ class PushupAnalyzer(ExerciseAnalyzer):
 
         # === 姿势纠正（仅在 READY/UP/DOWN 阶段） ===
         if self.phase in (RepPhase.READY, RepPhase.UP, RepPhase.DOWN):
-            if hip_dev > HIP_SAG_THRESHOLD:
+            if hip_dev > self.hip_sag:
                 feedbacks.append(("hip_sag", "臀部太低了，收紧核心抬起来"))
-            elif hip_dev < HIP_PIKE_THRESHOLD:
+            elif hip_dev < self.hip_pike:
                 feedbacks.append(("hip_pike", "臀部太高了，身体保持一条直线"))
 
             nose = landmarks[NOSE]

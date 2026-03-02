@@ -182,7 +182,7 @@ class TrayApp(rumps.App):
 
         analyzer = analyzer_cls()
         self._exercise_monitor = ExerciseMonitor(
-            analyzer, camera=self.settings.camera, debug=self.debug,
+            analyzer, camera=self.settings.camera, debug=True,
         )
         if not self._exercise_monitor.check_model():
             rumps.notification("Sit Monitor", "错误", "未找到模型文件")

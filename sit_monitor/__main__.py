@@ -24,6 +24,11 @@ def parse_args():
     p.add_argument("--sit-max-minutes", type=int, default=45, help="连续就坐多少分钟后提醒休息 (默认: 45)")
     p.add_argument("--sound", action="store_true", help="启用语音播报提醒")
     p.add_argument("--tray", action="store_true", help="启用系统托盘模式")
+    # 俯卧撑参数
+    p.add_argument("--elbow-down", type=float, default=130, help="肘角低于此进入下降阶段/度 (默认: 130)")
+    p.add_argument("--elbow-up", type=float, default=145, help="肘角高于此计为一次/度 (默认: 145)")
+    p.add_argument("--hip-threshold", type=float, default=0.06, help="臀部偏离阈值 (默认: 0.06)")
+    p.add_argument("--depth-threshold", type=float, default=100, help="下降不够深警告阈值/度 (默认: 100)")
     return p.parse_args()
 
 
@@ -66,7 +71,16 @@ def _run_exercise(args):
         print(f"错误: 未知运动模式 '{args.mode}'")
         sys.exit(1)
 
-    analyzer = analyzer_cls()
+    # 传递可配置的阈值
+    if args.mode == "pushup":
+        analyzer = analyzer_cls(
+            elbow_down=args.elbow_down,
+            elbow_up=args.elbow_up,
+            hip_threshold=args.hip_threshold,
+            depth_threshold=args.depth_threshold,
+        )
+    else:
+        analyzer = analyzer_cls()
     monitor = ExerciseMonitor(analyzer, camera=args.camera, debug=args.debug)
 
     if not monitor.check_model():
