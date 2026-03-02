@@ -6,6 +6,7 @@ PYTHON="$PROJECT_DIR/.venv/bin/python"
 SCRIPT="$PROJECT_DIR/sit_monitor.py"
 LOG_DIR="$PROJECT_DIR/logs"
 SESSION="sit-monitor"
+TRAY_PID_FILE="$PROJECT_DIR/.tray.pid"
 # 自动检测用户 shell 配置文件
 case "$(basename "$SHELL")" in
     zsh)  SHELL_RC="$HOME/.zshrc" ;;
@@ -14,23 +15,22 @@ case "$(basename "$SHELL")" in
 esac
 MARKER="# sit-monitor auto-start"
 
-if ! command -v tmux &>/dev/null; then
-    echo "错误: 需要 tmux。安装方式: brew install tmux"
-    exit 1
-fi
-
 usage() {
     echo "用法: $0 {install|uninstall|start|stop|restart|status|log|update}"
     echo ""
-    echo "  install   安装自启动（iTerm2 打开时自动启动）"
+    echo "  install   安装自启动（登录时自动启动托盘）"
     echo "  uninstall 卸载自启动"
-    echo "  start     手动启动"
+    echo "  start     启动（托盘模式，后台运行）"
     echo "  stop      停止"
     echo "  restart   重启"
     echo "  status    查看状态"
     echo "  log       查看实时日志"
     echo "  update    从 GitHub 拉取最新代码并重启"
     exit 1
+}
+
+_tray_running() {
+    [ -f "$TRAY_PID_FILE" ] && kill -0 "$(cat "$TRAY_PID_FILE")" 2>/dev/null
 }
 
 do_install() {
@@ -50,21 +50,19 @@ do_install() {
     cat >> "$SHELL_RC" << EOF
 
 $MARKER
-if command -v tmux &>/dev/null && [ -z "\${TMUX:-}" ]; then
-    tmux has-session -t $SESSION 2>/dev/null || \
-        tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --tray >> $LOG_DIR/sit-monitor.log 2>&1"
+if [ -z "\${TMUX:-}" ]; then
+    bash "$PROJECT_DIR/service.sh" start 2>/dev/null &
 fi
 EOF
 
     echo "已添加自启动到 $SHELL_RC"
-    echo "下次打开 iTerm2 时会自动启动坐姿监控"
+    echo "下次打开终端时会自动启动坐姿监控托盘"
     echo "或运行 '$0 start' 立即启动"
 }
 
 do_uninstall() {
     do_stop 2>/dev/null || true
     if grep -q "$MARKER" "$SHELL_RC" 2>/dev/null; then
-        # 删除 marker 行及其后 4 行
         sed -i '' "/$MARKER/,+4d" "$SHELL_RC"
         echo "已从 $SHELL_RC 移除自启动"
     else
@@ -74,25 +72,45 @@ do_uninstall() {
 
 do_start() {
     mkdir -p "$LOG_DIR"
-    if tmux has-session -t $SESSION 2>/dev/null; then
-        echo "已在运行中"
+
+    # 先停掉旧的 tmux session（如果有）
+    if command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
+        tmux kill-session -t $SESSION 2>/dev/null || true
+    fi
+
+    if _tray_running; then
+        echo "已在运行中 (PID: $(cat "$TRAY_PID_FILE"))"
         return
     fi
-    tmux new-session -d -s $SESSION "$PYTHON $SCRIPT --tray >> $LOG_DIR/sit-monitor.log 2>&1"
-    echo "已启动 (tmux session: $SESSION)"
+
+    # 托盘模式需要 GUI 环境，用 nohup 后台启动
+    nohup "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
+    echo $! > "$TRAY_PID_FILE"
+    echo "已启动托盘模式 (PID: $!)"
 }
 
 do_stop() {
-    if tmux has-session -t $SESSION 2>/dev/null; then
-        tmux kill-session -t $SESSION
+    # 停 tray 进程
+    if _tray_running; then
+        kill "$(cat "$TRAY_PID_FILE")" 2>/dev/null
+        rm -f "$TRAY_PID_FILE"
         echo "已停止"
-    else
-        echo "未在运行"
+        return
     fi
+    # 兼容旧的 tmux session
+    if command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
+        tmux kill-session -t $SESSION
+        echo "已停止 (tmux)"
+        return
+    fi
+    rm -f "$TRAY_PID_FILE"
+    echo "未在运行"
 }
 
 do_status() {
-    if tmux has-session -t $SESSION 2>/dev/null; then
+    if _tray_running; then
+        echo "状态: 运行中 (托盘模式, PID: $(cat "$TRAY_PID_FILE"))"
+    elif command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
         echo "状态: 运行中 (tmux session: $SESSION)"
         echo "查看: tmux attach -t $SESSION"
     else
@@ -134,7 +152,7 @@ do_update() {
     fi
 
     # 如果正在运行，自动重启
-    if tmux has-session -t $SESSION 2>/dev/null; then
+    if _tray_running || { command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; }; then
         echo "重启服务..."
         do_stop
         sleep 1
