@@ -2,6 +2,7 @@
 
 import json
 import os
+import uuid
 from dataclasses import asdict, dataclass, field
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,6 +23,19 @@ class Settings:
     auto_pause: bool = False
     camera: int = 0
     browser: str = ""
+    # Cloud / Social
+    cloud_enabled: bool = False
+    nickname: str = "匿名用户"
+    device_id: str = ""
+    share_posture: bool = True
+    share_exercise: bool = True
+    supabase_refresh_token: str = ""
+
+    def ensure_device_id(self):
+        """首次启动时自动生成设备 ID 并保存"""
+        if not self.device_id:
+            self.device_id = uuid.uuid4().hex[:12]
+            self.save()
 
     @property
     def thresholds(self):

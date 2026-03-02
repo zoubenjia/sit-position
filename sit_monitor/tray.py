@@ -1,10 +1,12 @@
 """系统托盘应用：rumps 菜单栏 + 状态更新"""
 
+import logging
 import os
 import subprocess
 import sys
 import threading
 import time
+from datetime import date, timedelta
 
 import rumps
 
@@ -12,6 +14,8 @@ from sit_monitor.core import PostureMonitor
 from sit_monitor.exercise import EXERCISE_REGISTRY, ExerciseMonitor
 from sit_monitor.report import daily_summary_text, weekly_report
 from sit_monitor.settings import Settings
+
+log = logging.getLogger(__name__)
 
 VERSION = "1.1.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
@@ -36,10 +40,15 @@ class TrayApp(rumps.App):
         self.monitor = None
         self.monitor_thread = None
         self._exercise_proc = None
+        self._preview_proc = None
         self._state = "stopped"
         self._details = {}
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
+        # Cloud
+        self._cloud_client = None
+        self._sync_manager = None
+        self._achievement_engine = None
         self._build_menu()
         self._start_auto_update_check()
 
@@ -49,6 +58,7 @@ class TrayApp(rumps.App):
             rumps.MenuItem("✓ 姿势良好", callback=None),
             None,
             rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
+            rumps.MenuItem("📷 Show Camera", callback=self._toggle_preview),
             rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
             None,
             rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
@@ -87,6 +97,26 @@ class TrayApp(rumps.App):
                     callback=self._toggle_auto_pause,
                 ),
             ]],
+            None,
+            [rumps.MenuItem("🌐 Social"), [
+                rumps.MenuItem("📊 Leaderboard (Today)", callback=self._show_leaderboard_daily),
+                rumps.MenuItem("📊 Leaderboard (Week)", callback=self._show_leaderboard_weekly),
+                None,
+                rumps.MenuItem("🏅 My Achievements (0/7)", callback=self._show_achievements),
+                rumps.MenuItem("⚔️ Challenges", callback=self._show_challenges),
+                None,
+                rumps.MenuItem("🔄 Sync Now", callback=self._sync_now),
+                rumps.MenuItem(f"Nickname: {s.nickname}", callback=self._change_nickname),
+                rumps.MenuItem(
+                    f"{'☑' if s.share_posture else '☐'} Share Data",
+                    callback=self._toggle_share,
+                ),
+            ]],
+            None,
+            rumps.MenuItem(
+                f"{'☑' if s.cloud_enabled else '☐'} Enable Cloud",
+                callback=self._toggle_cloud,
+            ),
             None,
             rumps.MenuItem("Check for Updates", callback=self._check_update),
             rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
@@ -235,6 +265,57 @@ class TrayApp(rumps.App):
                 self._exercise_proc.kill()
             self._exercise_proc = None
 
+    # --- Preview ---
+
+    def _is_previewing(self):
+        return self._preview_proc is not None and self._preview_proc.poll() is None
+
+    def _toggle_preview(self, sender):
+        if self._is_previewing():
+            self._stop_preview()
+            sender.title = "📷 Show Camera"
+        else:
+            self._start_preview(sender)
+
+    def _start_preview(self, sender):
+        # 暂停坐姿监控（避免抢摄像头）
+        self._preview_was_monitoring = self._is_running()
+        if self._preview_was_monitoring:
+            self._stop_monitor()
+            try:
+                self.menu["Start Monitoring"].title = "Start Monitoring"
+            except Exception:
+                pass
+
+        python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+        args = [python, "-m", "sit_monitor", "preview",
+                "--camera", str(self.settings.camera)]
+        self._preview_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
+        sender.title = "📷 Hide Camera"
+
+        def wait_and_cleanup():
+            self._preview_proc.wait()
+            sender.title = "📷 Show Camera"
+            self._preview_proc = None
+            # 恢复坐姿监控
+            if self._preview_was_monitoring:
+                self._start_monitor()
+                try:
+                    self.menu["Start Monitoring"].title = "Stop Monitoring"
+                except Exception:
+                    pass
+
+        threading.Thread(target=wait_and_cleanup, daemon=True).start()
+
+    def _stop_preview(self):
+        if self._preview_proc and self._preview_proc.poll() is None:
+            self._preview_proc.terminate()
+            try:
+                self._preview_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._preview_proc.kill()
+            self._preview_proc = None
+
     # --- Snooze ---
 
     def _snooze(self, sender):
@@ -297,6 +378,180 @@ class TrayApp(rumps.App):
         self.settings.auto_pause = not self.settings.auto_pause
         self.settings.save()
         sender.title = f"{'☑' if self.settings.auto_pause else '☐'} Auto-pause"
+
+    # --- Cloud / Social ---
+
+    def _init_cloud(self):
+        """初始化云端功能"""
+        if not self.settings.cloud_enabled:
+            return
+        try:
+            from sit_monitor.cloud import AchievementEngine, CloudClient, SyncManager
+            self.settings.ensure_device_id()
+            self._cloud_client = CloudClient()
+            self._sync_manager = SyncManager(self.settings, self._cloud_client)
+            self._achievement_engine = AchievementEngine()
+            self._sync_manager.start()
+            self._update_social_menu()
+        except Exception as e:
+            log.warning("Cloud init error: %s", e)
+
+    def _stop_cloud(self):
+        if self._sync_manager:
+            self._sync_manager.stop()
+            self._sync_manager = None
+        if self._cloud_client:
+            self._cloud_client.close()
+            self._cloud_client = None
+
+    def _toggle_cloud(self, sender):
+        self.settings.cloud_enabled = not self.settings.cloud_enabled
+        self.settings.save()
+        sender.title = f"{'☑' if self.settings.cloud_enabled else '☐'} Enable Cloud"
+        if self.settings.cloud_enabled:
+            self._init_cloud()
+        else:
+            self._stop_cloud()
+
+    def _update_social_menu(self):
+        """更新 Social 菜单中的动态文字"""
+        try:
+            if self._achievement_engine:
+                n = self._achievement_engine.unlocked_count
+                total = self._achievement_engine.total_count
+                self.menu["🌐 Social"]["🏅 My Achievements (0/7)"].title = f"🏅 My Achievements ({n}/{total})"
+        except Exception:
+            pass
+
+    def _show_leaderboard_daily(self, _):
+        if not self._cloud_client:
+            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            return
+        try:
+            today = str(date.today())
+            entries = self._cloud_client.leaderboard_daily(today)
+            if not entries:
+                rumps.alert("📊 今日排行榜", "暂无数据")
+                return
+            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines.append("-" * 40)
+            for e in entries[:20]:
+                lines.append(
+                    f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}"
+                )
+            rumps.alert(title="📊 今日排行榜", message="\n".join(lines), ok="好的")
+        except Exception as e:
+            rumps.alert("排行榜错误", str(e))
+
+    def _show_leaderboard_weekly(self, _):
+        if not self._cloud_client:
+            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            return
+        try:
+            today = date.today()
+            week_start = str(today - timedelta(days=today.weekday()))
+            entries = self._cloud_client.leaderboard_weekly(week_start)
+            if not entries:
+                rumps.alert("📊 本周排行榜", "暂无数据")
+                return
+            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines.append("-" * 40)
+            for e in entries[:20]:
+                lines.append(
+                    f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}"
+                )
+            rumps.alert(title="📊 本周排行榜", message="\n".join(lines), ok="好的")
+        except Exception as e:
+            rumps.alert("排行榜错误", str(e))
+
+    def _show_achievements(self, _):
+        if not self._achievement_engine:
+            from sit_monitor.cloud.achievements import AchievementEngine
+            self._achievement_engine = AchievementEngine()
+        achs = self._achievement_engine.get_all_achievements()
+        lines = []
+        for a in achs:
+            status = "✅" if a["unlocked"] else "🔒"
+            lines.append(f"{status} {a['icon']} {a['name']}: {a['description']}")
+        rumps.alert(
+            title=f"🏅 成就 ({self._achievement_engine.unlocked_count}/{self._achievement_engine.total_count})",
+            message="\n".join(lines),
+            ok="好的",
+        )
+
+    def _show_challenges(self, _):
+        if not self._cloud_client:
+            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            return
+        try:
+            challenges = self._cloud_client.list_my_challenges()
+            if not challenges:
+                rumps.alert("⚔️ 挑战", "暂无挑战\n\n通过 MCP 工具 social_create_challenge 发起挑战")
+                return
+            lines = []
+            for ch in challenges[:10]:
+                status = {"pending": "⏳", "active": "⚔️", "completed": "✅"}.get(ch.get("status"), "?")
+                lines.append(
+                    f"{status} {ch.get('challenge_type','?')} "
+                    f"目标:{ch.get('target_value',0)} "
+                    f"发起方:{ch.get('creator_score',0):.0f} vs 接受方:{ch.get('opponent_score',0):.0f}"
+                )
+            rumps.alert(title="⚔️ 挑战", message="\n".join(lines), ok="好的")
+        except Exception as e:
+            rumps.alert("挑战错误", str(e))
+
+    def _sync_now(self, _):
+        if not self._sync_manager:
+            rumps.alert("Social", "请先在 Settings 中开启 Enable Cloud")
+            return
+        def do_sync():
+            self._sync_manager.sync_once()
+            rumps.notification("Sit Monitor", "同步完成", "数据已上传到云端")
+        threading.Thread(target=do_sync, daemon=True).start()
+
+    def _change_nickname(self, _):
+        resp = rumps.Window(
+            title="修改昵称",
+            message="输入新昵称（2-20 个字符）",
+            default_text=self.settings.nickname,
+            ok="确定",
+            cancel="取消",
+        ).run()
+        if resp.clicked and resp.text.strip():
+            new_name = resp.text.strip()[:20]
+            self.settings.nickname = new_name
+            self.settings.save()
+            try:
+                self.menu["🌐 Social"][f"Nickname: {self.settings.nickname}"].title = f"Nickname: {new_name}"
+            except Exception:
+                pass
+            if self._cloud_client:
+                threading.Thread(
+                    target=self._cloud_client.update_nickname,
+                    args=(new_name,),
+                    daemon=True,
+                ).start()
+
+    def _toggle_share(self, sender):
+        self.settings.share_posture = not self.settings.share_posture
+        self.settings.share_exercise = self.settings.share_posture
+        self.settings.save()
+        sender.title = f"{'☑' if self.settings.share_posture else '☐'} Share Data"
+
+    def _check_achievements(self):
+        """定时检查成就，解锁时发通知"""
+        if not self._achievement_engine:
+            return
+        try:
+            newly = self._achievement_engine.check_and_unlock()
+            for a in newly:
+                rumps.notification("Sit Monitor", f"🎉 成就解锁: {a.icon} {a.name}", a.description)
+                # 上传到云端
+                if self._cloud_client:
+                    self._cloud_client.upload_achievement(a.id, self._achievement_engine._unlocked.get(a.id, ""))
+            self._update_social_menu()
+        except Exception as e:
+            log.warning("Achievement check error: %s", e)
 
     # --- Auto Update ---
 
@@ -413,8 +668,10 @@ class TrayApp(rumps.App):
 
     @rumps.clicked("Quit")
     def quit_app(self, _):
+        self._stop_preview()
         self._stop_exercise()
         self._stop_monitor()
+        self._stop_cloud()
         rumps.quit_application()
 
     def run(self):
@@ -426,10 +683,17 @@ class TrayApp(rumps.App):
                 self.menu["Start Monitoring"].title = "Stop Monitoring"
             except Exception:
                 pass
+            # 初始化云端功能
+            self._init_cloud()
 
         # 每 60 秒检查是否需要发送每日报告
         @rumps.timer(60)
         def daily_report_check(t):
             self._check_daily_report(t)
+
+        # 每 30 分钟检查成就
+        @rumps.timer(1800)
+        def achievement_check(t):
+            self._check_achievements()
 
         super().run()

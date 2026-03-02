@@ -15,6 +15,7 @@ dependencies = [
     "opencv-python",
     "numpy",
     "rumps",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

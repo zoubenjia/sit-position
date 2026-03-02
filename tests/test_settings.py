@@ -10,9 +10,9 @@ from sit_monitor.settings import Settings
 class TestSettingsDefaults:
     def test_default_values(self):
         s = Settings()
-        assert s.shoulder_threshold == 7.0
-        assert s.neck_threshold == 10.0
-        assert s.torso_threshold == 5.0
+        assert s.shoulder_threshold == 10.0
+        assert s.neck_threshold == 20.0
+        assert s.torso_threshold == 8.0
         assert s.interval == 5.0
         assert s.bad_seconds == 30
         assert s.cooldown == 180
@@ -23,7 +23,7 @@ class TestSettingsDefaults:
     def test_thresholds_property(self):
         s = Settings()
         t = s.thresholds
-        assert t == {"shoulder": 7.0, "neck": 10.0, "torso": 5.0}
+        assert t == {"shoulder": 10.0, "neck": 20.0, "torso": 8.0}
 
     def test_custom_values(self):
         s = Settings(shoulder_threshold=12.0, sound=True)
@@ -45,13 +45,13 @@ class TestSettingsPersistence:
             assert loaded.sound is True
             assert loaded.sit_max_minutes == 30
             # 未修改的保持默认
-            assert loaded.neck_threshold == 10.0
+            assert loaded.neck_threshold == 20.0
         finally:
             os.unlink(path)
 
     def test_load_missing_file(self):
         s = Settings.load("/tmp/nonexistent_sit_settings_12345.json")
-        assert s.shoulder_threshold == 7.0  # 返回默认值
+        assert s.shoulder_threshold == 10.0  # 返回默认值
 
     def test_load_corrupt_json(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -59,7 +59,7 @@ class TestSettingsPersistence:
             path = f.name
         try:
             s = Settings.load(path)
-            assert s.shoulder_threshold == 7.0  # 损坏文件返回默认值
+            assert s.shoulder_threshold == 10.0  # 损坏文件返回默认值
         finally:
             os.unlink(path)
 
@@ -119,12 +119,12 @@ class TestSettingsApplyArgs:
         from argparse import Namespace
         s = Settings(shoulder_threshold=9.0, sound=True)
         args = Namespace(
-            shoulder_threshold=7.0, neck_threshold=10.0, torso_threshold=5.0,
+            shoulder_threshold=10.0, neck_threshold=20.0, torso_threshold=8.0,
             interval=5.0, bad_seconds=30, cooldown=180, sit_max_minutes=45,
             away_seconds=3.0, sound=False, auto_pause=False, camera=0, browser=None,
         )
         s.apply_args(args)
-        # 7.0 是默认值，不应覆盖已保存的 9.0
+        # 10.0 是默认值，不应覆盖已保存的 9.0
         assert s.shoulder_threshold == 9.0
         # sound=False 是默认值，不应覆盖已保存的 True
         assert s.sound is True

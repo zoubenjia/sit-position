@@ -64,6 +64,7 @@ def daily_summary(date=None):
         "sit_alerts": sit_alerts,
         "good_minutes": round(total_good_min, 1),
         "bad_minutes": round(total_bad_min, 1),
+        "total_minutes": round(total_good_min + total_bad_min, 1),
     }
 
 

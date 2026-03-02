@@ -214,5 +214,161 @@ def exercise_query_sessions(
     return json.dumps({"total_sessions": len(sessions), "sessions": sessions}, ensure_ascii=False)
 
 
+# --- 社交功能 ---
+
+def _get_cloud_client():
+    """获取已认证的 CloudClient（懒加载）"""
+    settings = Settings.load()
+    if not settings.cloud_enabled:
+        return None, "云端功能未开启，请先在设置中开启 Enable Cloud"
+    from sit_monitor.cloud.client import CloudClient
+    client = CloudClient()
+    settings.ensure_device_id()
+    settings.ensure_device_id()
+    if not client.ensure_auth(settings.supabase_refresh_token, settings.device_id):
+        return None, "云端认证失败，请检查网络连接"
+    # 保存可能更新的 refresh_token
+    if client.refresh_token != settings.supabase_refresh_token:
+        settings.supabase_refresh_token = client.refresh_token
+        settings.save()
+    return client, None
+
+
+@mcp.tool()
+def social_leaderboard(
+    period: str = "daily",
+    date: str | None = None,
+) -> str:
+    """获取坐姿排行榜。
+
+    Args:
+        period: 排行榜类型 - "daily"（今日）或 "weekly"（本周）
+        date: 日期字符串 YYYY-MM-DD，daily 模式为目标日期，weekly 模式为周一日期。默认今天/本周。
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    from datetime import date as _date, timedelta
+    today = _date.today()
+
+    if period == "weekly":
+        target = date or str(today - timedelta(days=today.weekday()))
+        entries = client.leaderboard_weekly(target)
+    else:
+        target = date or str(today)
+        entries = client.leaderboard_daily(target)
+
+    client.close()
+    result = []
+    for e in entries:
+        result.append({
+            "rank": e.rank,
+            "nickname": e.nickname,
+            "good_pct": e.good_pct,
+            "total_minutes": e.total_minutes,
+            "likes_count": e.likes_count,
+            "user_id": e.user_id,
+        })
+    return json.dumps({"period": period, "date": target, "entries": result}, ensure_ascii=False)
+
+
+@mcp.tool()
+def social_my_achievements() -> str:
+    """获取我的成就/徽章列表，包含已解锁和未解锁的。"""
+    from sit_monitor.cloud.achievements import AchievementEngine
+    engine = AchievementEngine()
+    # 先检查是否有新成就可以解锁
+    newly = engine.check_and_unlock()
+    achs = engine.get_all_achievements()
+    return json.dumps({
+        "unlocked_count": engine.unlocked_count,
+        "total_count": engine.total_count,
+        "newly_unlocked": [{"id": a.id, "name": a.name, "icon": a.icon} for a in newly],
+        "achievements": achs,
+    }, ensure_ascii=False)
+
+
+@mcp.tool()
+def social_send_like(
+    to_user_id: str,
+    report_date: str,
+    emoji: str = "👍",
+) -> str:
+    """给排行榜上某用户的日报点赞/鼓励。
+
+    Args:
+        to_user_id: 目标用户 ID（从排行榜获取）
+        report_date: 日报日期 YYYY-MM-DD
+        emoji: 表情，默认 👍
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    ok = client.send_like(to_user_id, report_date, emoji)
+    # 解锁"社交蝴蝶"成就
+    if ok:
+        from sit_monitor.cloud.achievements import AchievementEngine
+        engine = AchievementEngine()
+        engine.unlock("first_like")
+        if client:
+            client.upload_achievement("first_like", engine._unlocked.get("first_like", ""))
+
+    client.close()
+    return json.dumps({"success": ok}, ensure_ascii=False)
+
+
+@mcp.tool()
+def social_create_challenge(
+    opponent_id: str,
+    challenge_type: str = "good_pct",
+    target_value: int = 80,
+    duration_days: int = 7,
+) -> str:
+    """向另一位用户发起坐姿挑战。
+
+    Args:
+        opponent_id: 对手用户 ID（从排行榜获取）
+        challenge_type: 挑战类型 - "good_pct"（良好率）或 "total_minutes"（监控时长）
+        target_value: 目标值（good_pct 时为百分比，total_minutes 时为分钟数）
+        duration_days: 挑战持续天数，默认 7
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    result = client.create_challenge(opponent_id, challenge_type, target_value, duration_days)
+    client.close()
+    if result:
+        return json.dumps({"success": True, "challenge": result}, ensure_ascii=False)
+    return json.dumps({"success": False, "error": "创建挑战失败"}, ensure_ascii=False)
+
+
+@mcp.tool()
+def social_my_challenges() -> str:
+    """获取我发起的和收到的挑战列表。"""
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    challenges = client.list_my_challenges()
+    client.close()
+    return json.dumps({"challenges": challenges}, ensure_ascii=False)
+
+
+@mcp.tool()
+def social_profile() -> str:
+    """获取当前用户的社交资料（昵称、设备ID、分享设置）。"""
+    settings = Settings.load()
+    return json.dumps({
+        "cloud_enabled": settings.cloud_enabled,
+        "nickname": settings.nickname,
+        "device_id": settings.device_id,
+        "share_posture": settings.share_posture,
+        "share_exercise": settings.share_exercise,
+    }, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     mcp.run()

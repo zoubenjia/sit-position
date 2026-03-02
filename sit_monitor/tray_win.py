@@ -1,10 +1,12 @@
 """Windows 系统托盘应用：pystray + Pillow，镜像 tray.py 全部功能"""
 
+import logging
 import os
 import subprocess
 import sys
 import threading
 import time
+from datetime import date, timedelta
 
 import pystray
 from PIL import Image
@@ -12,6 +14,8 @@ from PIL import Image
 from sit_monitor.core import PostureMonitor
 from sit_monitor.report import daily_summary_text, weekly_report
 from sit_monitor.settings import Settings
+
+log = logging.getLogger(__name__)
 
 VERSION = "1.1.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
@@ -67,6 +71,10 @@ class TrayApp:
         self._posture_hint = "— 未启动"
         self._auto_update_hours = 12
         self._icon = None
+        # Cloud
+        self._cloud_client = None
+        self._sync_manager = None
+        self._achievement_engine = None
 
     def _build_menu(self):
         s = self.settings
@@ -133,6 +141,32 @@ class TrayApp:
                     self._toggle_auto_pause,
                 ),
             )),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("🌐 Social", pystray.Menu(
+                pystray.MenuItem("📊 Leaderboard (Today)", self._show_leaderboard_daily),
+                pystray.MenuItem("📊 Leaderboard (Week)", self._show_leaderboard_weekly),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem(
+                    lambda item: f"🏅 My Achievements ({self._achievement_engine.unlocked_count}/{self._achievement_engine.total_count})" if self._achievement_engine else "🏅 My Achievements (0/7)",
+                    self._show_achievements,
+                ),
+                pystray.MenuItem("⚔️ Challenges", self._show_challenges),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("🔄 Sync Now", self._sync_now),
+                pystray.MenuItem(
+                    lambda item: f"Nickname: {self.settings.nickname}",
+                    self._change_nickname,
+                ),
+                pystray.MenuItem(
+                    lambda item: f"{'☑' if self.settings.share_posture else '☐'} Share Data",
+                    self._toggle_share,
+                ),
+            )),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                lambda item: f"{'☑' if self.settings.cloud_enabled else '☐'} Enable Cloud",
+                self._toggle_cloud,
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Check for Updates", self._check_update),
             pystray.MenuItem(f"About v{VERSION}", self._show_about),
@@ -290,6 +324,157 @@ class TrayApp:
         self.settings.auto_pause = not self.settings.auto_pause
         self.settings.save()
 
+    # --- Cloud / Social ---
+
+    def _init_cloud(self):
+        if not self.settings.cloud_enabled:
+            return
+        try:
+            from sit_monitor.cloud import AchievementEngine, CloudClient, SyncManager
+            self.settings.ensure_device_id()
+            self._cloud_client = CloudClient()
+            self._sync_manager = SyncManager(self.settings, self._cloud_client)
+            self._achievement_engine = AchievementEngine()
+            self._sync_manager.start()
+        except Exception as e:
+            log.warning("Cloud init error: %s", e)
+
+    def _stop_cloud(self):
+        if self._sync_manager:
+            self._sync_manager.stop()
+            self._sync_manager = None
+        if self._cloud_client:
+            self._cloud_client.close()
+            self._cloud_client = None
+
+    def _toggle_cloud(self):
+        self.settings.cloud_enabled = not self.settings.cloud_enabled
+        self.settings.save()
+        if self.settings.cloud_enabled:
+            self._init_cloud()
+        else:
+            self._stop_cloud()
+
+    def _show_leaderboard_daily(self):
+        if not self._cloud_client:
+            _msgbox("Social", "请先开启 Enable Cloud")
+            return
+        try:
+            today = str(date.today())
+            entries = self._cloud_client.leaderboard_daily(today)
+            if not entries:
+                _msgbox("📊 今日排行榜", "暂无数据")
+                return
+            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines.append("-" * 40)
+            for e in entries[:20]:
+                lines.append(f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}")
+            _msgbox("📊 今日排行榜", "\n".join(lines))
+        except Exception as e:
+            _msgbox("排行榜错误", str(e))
+
+    def _show_leaderboard_weekly(self):
+        if not self._cloud_client:
+            _msgbox("Social", "请先开启 Enable Cloud")
+            return
+        try:
+            today = date.today()
+            week_start = str(today - timedelta(days=today.weekday()))
+            entries = self._cloud_client.leaderboard_weekly(week_start)
+            if not entries:
+                _msgbox("📊 本周排行榜", "暂无数据")
+                return
+            lines = [f"{'#':>2}  {'昵称':<10}  {'良好率':>5}  {'时长':>5}  {'👍':>3}"]
+            lines.append("-" * 40)
+            for e in entries[:20]:
+                lines.append(f"{e.rank:>2}  {e.nickname:<10}  {e.good_pct:>4}%  {e.total_minutes:>4.0f}m  {e.likes_count:>3}")
+            _msgbox("📊 本周排行榜", "\n".join(lines))
+        except Exception as e:
+            _msgbox("排行榜错误", str(e))
+
+    def _show_achievements(self):
+        if not self._achievement_engine:
+            from sit_monitor.cloud.achievements import AchievementEngine
+            self._achievement_engine = AchievementEngine()
+        achs = self._achievement_engine.get_all_achievements()
+        lines = []
+        for a in achs:
+            status = "✅" if a["unlocked"] else "🔒"
+            lines.append(f"{status} {a['icon']} {a['name']}: {a['description']}")
+        _msgbox(
+            f"🏅 成就 ({self._achievement_engine.unlocked_count}/{self._achievement_engine.total_count})",
+            "\n".join(lines),
+        )
+
+    def _show_challenges(self):
+        if not self._cloud_client:
+            _msgbox("Social", "请先开启 Enable Cloud")
+            return
+        try:
+            challenges = self._cloud_client.list_my_challenges()
+            if not challenges:
+                _msgbox("⚔️ 挑战", "暂无挑战\n\n通过 MCP 工具 social_create_challenge 发起挑战")
+                return
+            lines = []
+            for ch in challenges[:10]:
+                status_icon = {"pending": "⏳", "active": "⚔️", "completed": "✅"}.get(ch.get("status"), "?")
+                lines.append(
+                    f"{status_icon} {ch.get('challenge_type','?')} "
+                    f"目标:{ch.get('target_value',0)} "
+                    f"发起方:{ch.get('creator_score',0):.0f} vs 接受方:{ch.get('opponent_score',0):.0f}"
+                )
+            _msgbox("⚔️ 挑战", "\n".join(lines))
+        except Exception as e:
+            _msgbox("挑战错误", str(e))
+
+    def _sync_now(self):
+        if not self._sync_manager:
+            _msgbox("Social", "请先开启 Enable Cloud")
+            return
+        def do_sync():
+            self._sync_manager.sync_once()
+            from sit_monitor.platform_win import send_notification
+            send_notification("Sit Monitor", "数据已上传到云端")
+        threading.Thread(target=do_sync, daemon=True).start()
+
+    def _change_nickname(self):
+        # Windows 上用 tkinter 简易输入框
+        try:
+            import tkinter as tk
+            from tkinter import simpledialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            new_name = simpledialog.askstring("修改昵称", "输入新昵称（2-20 个字符）",
+                                              initialvalue=self.settings.nickname, parent=root)
+            root.destroy()
+            if new_name and new_name.strip():
+                new_name = new_name.strip()[:20]
+                self.settings.nickname = new_name
+                self.settings.save()
+                if self._cloud_client:
+                    threading.Thread(target=self._cloud_client.update_nickname, args=(new_name,), daemon=True).start()
+        except Exception:
+            pass
+
+    def _toggle_share(self):
+        self.settings.share_posture = not self.settings.share_posture
+        self.settings.share_exercise = self.settings.share_posture
+        self.settings.save()
+
+    def _check_achievements(self):
+        if not self._achievement_engine:
+            return
+        try:
+            newly = self._achievement_engine.check_and_unlock()
+            for a in newly:
+                from sit_monitor.platform_win import send_notification
+                send_notification("Sit Monitor", f"🎉 成就解锁: {a.icon} {a.name} — {a.description}")
+                if self._cloud_client:
+                    self._cloud_client.upload_achievement(a.id, self._achievement_engine._unlocked.get(a.id, ""))
+        except Exception as e:
+            log.warning("Achievement check error: %s", e)
+
     # --- Update ---
 
     def _check_update(self):
@@ -396,6 +581,7 @@ class TrayApp:
     def _quit(self):
         self._stop_exercise()
         self._stop_monitor()
+        self._stop_cloud()
         if self._icon:
             self._icon.stop()
 
@@ -408,5 +594,12 @@ class TrayApp:
             icon.visible = True
             self._start_monitor()
             self._start_auto_update_check()
+            self._init_cloud()
+            # 成就定时检查（30 分钟）
+            def achievement_loop():
+                while True:
+                    time.sleep(1800)
+                    self._check_achievements()
+            threading.Thread(target=achievement_loop, daemon=True).start()
 
         self._icon.run(setup=on_setup)
