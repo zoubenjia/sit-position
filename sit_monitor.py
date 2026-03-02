@@ -384,7 +384,9 @@ def main():
                     continue
                 print(f"\r{'📷 摄像头已连接，开始监控...':<80}", end="", flush=True)
 
-            wait = args.interval - (now - last_check_time)
+            # 坏姿势时缩短检测间隔，加快反馈
+            interval = 2.0 if bad_start_time is not None else args.interval
+            wait = interval - (now - last_check_time)
             if wait > 0:
                 if args.debug:
                     cap.grab()
