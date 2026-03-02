@@ -64,6 +64,8 @@
 
 ## 快速开始
 
+**没装 Git？** 直接[下载 ZIP](https://github.com/zoubenjia/sit-position/archive/refs/heads/main.zip)，解压后进入文件夹运行 setup 即可。
+
 ### macOS
 
 ```bash
