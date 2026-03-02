@@ -1,4 +1,4 @@
-# setup.ps1 — Windows 环境搭建脚本
+﻿# setup.ps1 — Windows 环境搭建脚本
 # 用法: powershell -ExecutionPolicy Bypass -File setup.ps1
 
 $ErrorActionPreference = "Stop"

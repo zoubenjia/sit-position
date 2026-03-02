@@ -1,4 +1,4 @@
-# service.ps1 — Windows 服务管理脚本
+﻿# service.ps1 — Windows 服务管理脚本
 # 用法: powershell -ExecutionPolicy Bypass -File service.ps1 <command>
 # 命令: install | uninstall | start | stop | restart | status | update | log
 
