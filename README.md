@@ -67,7 +67,7 @@
 ### macOS
 
 ```bash
-git clone https://github.com/zoubenjia/sit-position.git
+git clone https://gitee.com/zoubenjia/sit-position.git
 cd sit-position
 bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
@@ -75,7 +75,7 @@ bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ### Windows
 
 ```powershell
-git clone https://github.com/zoubenjia/sit-position.git
+git clone https://gitee.com/zoubenjia/sit-position.git
 cd sit-position
 powershell -ExecutionPolicy Bypass -File setup.ps1    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
