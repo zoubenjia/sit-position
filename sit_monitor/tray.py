@@ -55,7 +55,36 @@ class TrayApp(rumps.App):
 
     def _build_menu(self):
         s = self.settings
-        self.menu = [
+        if s.simple_mode:
+            self.menu = self._menu_simple(s)
+        else:
+            self.menu = self._menu_advanced(s)
+        self._update_stats_menu()
+
+    def _menu_simple(self, s):
+        """精简模式：只保留核心功能，新用户友好"""
+        return [
+            rumps.MenuItem("✓ 姿势良好", callback=None),
+            None,
+            rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
+            rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
+            rumps.MenuItem("⚡ Quick Battle", callback=self._quick_battle),
+            None,
+            rumps.MenuItem("Statistics", callback=None),
+            rumps.MenuItem("View Report", callback=self._view_report),
+            None,
+            rumps.MenuItem(
+                f"{'☑' if s.cloud_enabled else '☐'} Enable Cloud",
+                callback=self._toggle_cloud,
+            ),
+            rumps.MenuItem("🔧 Advanced Mode", callback=self._toggle_mode),
+            rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
+            None,
+        ]
+
+    def _menu_advanced(self, s):
+        """进阶模式：完整功能"""
+        return [
             rumps.MenuItem("✓ 姿势良好", callback=None),
             None,
             rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
@@ -134,10 +163,32 @@ class TrayApp(rumps.App):
             ),
             None,
             rumps.MenuItem("Check for Updates", callback=self._check_update),
+            rumps.MenuItem("📋 Simple Mode", callback=self._toggle_mode),
             rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
             None,
         ]
-        self._update_stats_menu()
+
+    def _toggle_mode(self, _):
+        """切换简单/进阶模式"""
+        self.settings.simple_mode = not self.settings.simple_mode
+        self.settings.save()
+        # 重建菜单
+        was_running = self._is_running()
+        keys = list(self.menu.keys())
+        for key in keys:
+            try:
+                del self.menu[key]
+            except Exception:
+                pass
+        self._build_menu()
+        # 恢复运行状态文字
+        if was_running:
+            try:
+                self.menu["Start Monitoring"].title = "Stop Monitoring"
+            except Exception:
+                pass
+        mode_name = "精简" if self.settings.simple_mode else "进阶"
+        rumps.notification("Sit Monitor", f"已切换到{mode_name}模式", "")
 
     # --- 图标 ---
 
@@ -440,11 +491,13 @@ class TrayApp(rumps.App):
 
     def _update_social_menu(self):
         """更新 Social 菜单中的动态文字"""
+        if self.settings.simple_mode:
+            return
         try:
             if self._achievement_engine:
                 n = self._achievement_engine.unlocked_count
                 total = self._achievement_engine.total_count
-                self.menu["🌐 Social"]["🏅 My Achievements (0/7)"].title = f"🏅 My Achievements ({n}/{total})"
+                self.menu["🌐 Social"]["🏅 My Achievements (0/10)"].title = f"🏅 My Achievements ({n}/{total})"
         except Exception:
             pass
 

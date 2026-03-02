@@ -131,6 +131,26 @@ def _body_angle(landmarks) -> float:
     return raw if raw <= 90 else 180 - raw  # [0, 90]
 
 
+def classify_rep(form_feedbacks: list[tuple[str, str]], min_elbow: float) -> str:
+    """判断单个 rep 的质量。
+
+    Args:
+        form_feedbacks: 该 rep 期间收集的姿势反馈 [(category, message), ...]
+        min_elbow: 该 rep 期间最小肘角
+
+    Returns:
+        "good" | "shallow" | "bad"
+    """
+    categories = {cat for cat, _ in form_feedbacks}
+    if "shallow" in categories:
+        return "shallow"
+    if categories & {"hip_sag", "hip_pike", "head_drop"}:
+        return "bad"
+    if min_elbow > ELBOW_SHALLOW_THRESHOLD:
+        return "shallow"
+    return "good"
+
+
 class PushupAnalyzer(ExerciseAnalyzer):
     """俯卧撑分析器"""
 

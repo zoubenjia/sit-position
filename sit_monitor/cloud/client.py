@@ -9,6 +9,8 @@ from dataclasses import asdict
 import httpx
 
 from sit_monitor.cloud.models import (
+    Battle,
+    BattleResult,
     Challenge,
     DailyReport,
     LeaderboardEntry,
@@ -369,3 +371,277 @@ class CloudClient:
         except Exception as e:
             log.warning("Update challenge score error: %s", e)
             return False
+
+    # --- Battles ---
+
+    def create_battle(
+        self,
+        opponent_id: str,
+        mode: str = "async",
+        time_limit: int = 120,
+        quality_weight: float = 0.3,
+    ) -> dict | None:
+        """创建对战"""
+        try:
+            resp = self._client.post(
+                self._rest("pushup_battles"),
+                headers={**self._headers(), "Prefer": "return=representation"},
+                json={
+                    "creator_id": self.user_id,
+                    "opponent_id": opponent_id,
+                    "status": "invite",
+                    "mode": mode,
+                    "time_limit_seconds": time_limit,
+                    "quality_weight": quality_weight,
+                },
+            )
+            if resp.status_code in (200, 201):
+                rows = resp.json()
+                return rows[0] if rows else None
+            log.warning("Create battle failed: %s %s", resp.status_code, resp.text)
+            return None
+        except Exception as e:
+            log.warning("Create battle error: %s", e)
+            return None
+
+    def accept_battle(self, battle_id: str) -> bool:
+        """接受对战邀请"""
+        try:
+            resp = self._client.patch(
+                self._rest("pushup_battles") + f"?id=eq.{battle_id}",
+                headers=self._headers(),
+                json={"status": "accepted"},
+            )
+            return resp.status_code in (200, 204)
+        except Exception as e:
+            log.warning("Accept battle error: %s", e)
+            return False
+
+    def cancel_battle(self, battle_id: str) -> bool:
+        """取消对战"""
+        try:
+            resp = self._client.patch(
+                self._rest("pushup_battles") + f"?id=eq.{battle_id}",
+                headers=self._headers(),
+                json={"status": "cancelled"},
+            )
+            return resp.status_code in (200, 204)
+        except Exception as e:
+            log.warning("Cancel battle error: %s", e)
+            return False
+
+    def get_battle(self, battle_id: str) -> dict | None:
+        """获取对战详情"""
+        try:
+            resp = self._client.get(
+                self._rest("pushup_battles") + f"?id=eq.{battle_id}&select=*",
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                return rows[0] if rows else None
+            return None
+        except Exception as e:
+            log.warning("Get battle error: %s", e)
+            return None
+
+    def finish_battle(
+        self,
+        battle_id: str,
+        role: str,
+        result: BattleResult,
+    ) -> bool:
+        """提交某一方的对战成绩。
+
+        Args:
+            battle_id: 对战 ID
+            role: "creator" 或 "opponent"
+            result: BattleResult 包含 reps, good_reps, form_errors, score, duration_seconds
+        """
+        from datetime import datetime
+        try:
+            data = {
+                f"{role}_reps": result.reps,
+                f"{role}_good_reps": result.good_reps,
+                f"{role}_form_errors": result.form_errors,
+                f"{role}_score": result.score,
+                f"{role}_duration_seconds": result.duration_seconds,
+                f"{role}_finished_at": datetime.now().isoformat(),
+            }
+            resp = self._client.patch(
+                self._rest("pushup_battles") + f"?id=eq.{battle_id}",
+                headers=self._headers(),
+                json=data,
+            )
+            if resp.status_code not in (200, 204):
+                log.warning("Finish battle failed: %s %s", resp.status_code, resp.text)
+                return False
+
+            # 检查双方是否都完成，如果是则判定胜负
+            battle = self.get_battle(battle_id)
+            if battle and battle.get("creator_finished_at") and battle.get("opponent_finished_at"):
+                from sit_monitor.cloud.battle import determine_winner
+                winner = determine_winner(
+                    battle["creator_score"],
+                    battle["opponent_score"],
+                    battle["creator_id"],
+                    battle["opponent_id"],
+                )
+                self._client.patch(
+                    self._rest("pushup_battles") + f"?id=eq.{battle_id}",
+                    headers=self._headers(),
+                    json={
+                        "status": "finished",
+                        "winner_id": winner,
+                        "finished_at": datetime.now().isoformat(),
+                    },
+                )
+            return True
+        except Exception as e:
+            log.warning("Finish battle error: %s", e)
+            return False
+
+    def list_my_battles(self, status: str = "") -> list[dict]:
+        """列出我的对战"""
+        try:
+            uid = self.user_id
+            url = self._rest("pushup_battles") + f"?or=(creator_id.eq.{uid},opponent_id.eq.{uid})&order=created_at.desc"
+            if status:
+                url += f"&status=eq.{status}"
+            resp = self._client.get(url, headers=self._headers())
+            if resp.status_code != 200:
+                return []
+            return resp.json()
+        except Exception as e:
+            log.warning("List battles error: %s", e)
+            return []
+
+    def post_live_update(
+        self,
+        battle_id: str,
+        rep_number: int,
+        form_quality: str,
+        form_errors: list[str],
+        elapsed_seconds: float,
+    ) -> bool:
+        """发送实时对战进度更新"""
+        try:
+            resp = self._client.post(
+                self._rest("battle_live_updates"),
+                headers=self._headers(),
+                json={
+                    "battle_id": battle_id,
+                    "user_id": self.user_id,
+                    "rep_number": rep_number,
+                    "form_quality": form_quality,
+                    "form_errors": form_errors,
+                    "elapsed_seconds": elapsed_seconds,
+                },
+            )
+            return resp.status_code in (200, 201)
+        except Exception as e:
+            log.warning("Post live update error: %s", e)
+            return False
+
+    def poll_opponent_progress(self, battle_id: str, opponent_id: str) -> dict | None:
+        """轮询对手最新进度"""
+        try:
+            resp = self._client.get(
+                self._rest("battle_live_updates")
+                + f"?battle_id=eq.{battle_id}&user_id=eq.{opponent_id}&order=rep_number.desc&limit=1",
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                rows = resp.json()
+                return rows[0] if rows else None
+            return None
+        except Exception as e:
+            log.warning("Poll opponent progress error: %s", e)
+            return None
+
+    # --- OAuth (Google) ---
+
+    def get_oauth_url(self, provider: str = "google", redirect_url: str = "") -> str | None:
+        """获取 Supabase OAuth 授权 URL"""
+        try:
+            params = f"provider={provider}"
+            if redirect_url:
+                params += f"&redirect_to={redirect_url}"
+            resp = self._client.get(
+                self._auth_url(f"authorize?{params}"),
+                headers={"apikey": self.anon_key},
+                follow_redirects=False,
+            )
+            if resp.status_code in (302, 303):
+                return resp.headers.get("location")
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("url")
+            log.warning("Get OAuth URL failed: %s", resp.status_code)
+            return None
+        except Exception as e:
+            log.warning("Get OAuth URL error: %s", e)
+            return None
+
+    def exchange_code_for_session(self, code: str) -> bool:
+        """用 OAuth code 换取 session"""
+        try:
+            resp = self._client.post(
+                self._auth_url("token?grant_type=pkce"),
+                headers={"apikey": self.anon_key, "Content-Type": "application/json"},
+                json={"auth_code": code, "code_verifier": ""},
+            )
+            if resp.status_code != 200:
+                # 尝试标准 authorization_code 方式
+                resp = self._client.post(
+                    self._auth_url("token?grant_type=authorization_code"),
+                    headers={"apikey": self.anon_key, "Content-Type": "application/json"},
+                    json={"code": code},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                self.access_token = data.get("access_token", "")
+                self.refresh_token = data.get("refresh_token", "")
+                self.user_id = data.get("user", {}).get("id", "")
+                return bool(self.access_token)
+            log.warning("Exchange code failed: %s %s", resp.status_code, resp.text)
+            return False
+        except Exception as e:
+            log.warning("Exchange code error: %s", e)
+            return False
+
+    def link_social_account(self, provider: str = "google", redirect_url: str = "") -> str | None:
+        """生成绑定社交账号的 URL（绑定到现有账号）"""
+        try:
+            resp = self._client.get(
+                self._auth_url(f"authorize?provider={provider}&redirect_to={redirect_url}"),
+                headers=self._headers(),
+                follow_redirects=False,
+            )
+            if resp.status_code in (302, 303):
+                return resp.headers.get("location")
+            return None
+        except Exception as e:
+            log.warning("Link social account error: %s", e)
+            return None
+
+    def get_user_profile_from_provider(self) -> dict:
+        """获取当前用户的身份信息（包括社交登录的头像等）"""
+        try:
+            resp = self._client.get(
+                self._auth_url("user"),
+                headers=self._headers(),
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                meta = data.get("user_metadata", {})
+                return {
+                    "email": data.get("email", ""),
+                    "avatar_url": meta.get("avatar_url", meta.get("picture", "")),
+                    "full_name": meta.get("full_name", meta.get("name", "")),
+                    "provider": data.get("app_metadata", {}).get("provider", "device"),
+                }
+            return {}
+        except Exception as e:
+            log.warning("Get user profile error: %s", e)
+            return {}

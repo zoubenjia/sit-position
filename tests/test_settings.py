@@ -23,7 +23,7 @@ class TestSettingsDefaults:
     def test_thresholds_property(self):
         s = Settings()
         t = s.thresholds
-        assert t == {"shoulder": 10.0, "neck": 20.0, "torso": 8.0}
+        assert t == {"shoulder": 10.0, "neck": 20.0, "torso": 8.0, "head_tilt": 8.0}
 
     def test_custom_values(self):
         s = Settings(shoulder_threshold=12.0, sound=True)

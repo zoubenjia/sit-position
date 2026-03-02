@@ -367,7 +367,192 @@ def social_profile() -> str:
         "device_id": settings.device_id,
         "share_posture": settings.share_posture,
         "share_exercise": settings.share_exercise,
+        "auth_provider": settings.auth_provider,
     }, ensure_ascii=False)
+
+
+# --- 俯卧撑对战 ---
+
+@mcp.tool()
+def battle_create(
+    opponent_id: str,
+    mode: str = "async",
+    time_limit: int = 120,
+    quality_weight: float = 0.3,
+) -> str:
+    """创建俯卧撑对战。
+
+    Args:
+        opponent_id: 对手用户 ID（从排行榜获取）
+        mode: 对战模式 - "async"（异步，双方各自完成）或 "realtime"（实时）
+        time_limit: 时间限制（秒），默认 120
+        quality_weight: 质量权重 0-1，默认 0.3（动作质量占比 30%）
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    result = client.create_battle(opponent_id, mode, time_limit, quality_weight)
+    client.close()
+    if result:
+        return json.dumps({"success": True, "battle": result}, ensure_ascii=False)
+    return json.dumps({"success": False, "error": "创建对战失败"}, ensure_ascii=False)
+
+
+@mcp.tool()
+def battle_accept(battle_id: str) -> str:
+    """接受俯卧撑对战邀请。
+
+    Args:
+        battle_id: 对战 ID
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    ok = client.accept_battle(battle_id)
+    client.close()
+    return json.dumps({"success": ok}, ensure_ascii=False)
+
+
+@mcp.tool()
+def battle_cancel(battle_id: str) -> str:
+    """取消俯卧撑对战。
+
+    Args:
+        battle_id: 对战 ID
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    ok = client.cancel_battle(battle_id)
+    client.close()
+    return json.dumps({"success": ok}, ensure_ascii=False)
+
+
+@mcp.tool()
+def battle_list(status: str = "") -> str:
+    """列出我的俯卧撑对战。
+
+    Args:
+        status: 筛选状态（invite/accepted/active/finished/expired/cancelled），默认全部
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    battles = client.list_my_battles(status)
+    client.close()
+    return json.dumps({"battles": battles}, ensure_ascii=False)
+
+
+@mcp.tool()
+def battle_details(battle_id: str) -> str:
+    """获取对战详情。
+
+    Args:
+        battle_id: 对战 ID
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    battle = client.get_battle(battle_id)
+    client.close()
+    if battle:
+        return json.dumps({"battle": battle}, ensure_ascii=False)
+    return json.dumps({"error": "对战不存在"}, ensure_ascii=False)
+
+
+@mcp.tool()
+def battle_start_exercise(battle_id: str) -> str:
+    """开始对战运动（启动俯卧撑训练子进程）。
+
+    Args:
+        battle_id: 对战 ID
+    """
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    battle = client.get_battle(battle_id)
+    if not battle:
+        client.close()
+        return json.dumps({"error": "对战不存在"}, ensure_ascii=False)
+
+    if battle["status"] not in ("accepted", "active"):
+        client.close()
+        return json.dumps({"error": f"对战状态为 {battle['status']}，无法开始"}, ensure_ascii=False)
+
+    # 更新状态为 active
+    if battle["status"] == "accepted":
+        client._client.patch(
+            client._rest("pushup_battles") + f"?id=eq.{battle_id}",
+            headers=client._headers(),
+            json={"status": "active", "started_at": datetime.now().isoformat()},
+        )
+
+    client.close()
+    return json.dumps({
+        "success": True,
+        "message": "请通过托盘菜单 '⚔️ Push-up Battle' 或命令行启动俯卧撑训练",
+        "battle_id": battle_id,
+        "time_limit": battle.get("time_limit_seconds", 120),
+        "quality_weight": battle.get("quality_weight", 0.3),
+    }, ensure_ascii=False)
+
+
+# --- OAuth / 账号 ---
+
+@mcp.tool()
+def auth_status() -> str:
+    """获取当前认证状态和绑定的社交账号。"""
+    settings = Settings.load()
+    result = {
+        "auth_provider": settings.auth_provider,
+        "cloud_enabled": settings.cloud_enabled,
+        "device_id": settings.device_id,
+    }
+
+    if settings.cloud_enabled:
+        client, err = _get_cloud_client()
+        if not err:
+            profile = client.get_user_profile_from_provider()
+            client.close()
+            result.update(profile)
+
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+def auth_link_google() -> str:
+    """绑定 Google 账号。返回授权 URL，用户需在浏览器中完成授权。"""
+    client, err = _get_cloud_client()
+    if err:
+        return json.dumps({"error": err}, ensure_ascii=False)
+
+    from sit_monitor.cloud.social_auth import start_google_oauth
+    try:
+        result = start_google_oauth(client)
+        client.close()
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        client.close()
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+@mcp.tool()
+def auth_unlink_provider(provider: str = "google") -> str:
+    """解绑社交账号，恢复设备匿名认证。
+
+    Args:
+        provider: 要解绑的平台（google）
+    """
+    settings = Settings.load()
+    settings.auth_provider = "device"
+    settings.save()
+    return json.dumps({"success": True, "message": f"已解绑 {provider}，恢复匿名认证"}, ensure_ascii=False)
 
 
 if __name__ == "__main__":

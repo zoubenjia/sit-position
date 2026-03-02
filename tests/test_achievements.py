@@ -15,7 +15,7 @@ from sit_monitor.cloud.achievements import (
 
 class TestAchievementDefinitions:
     def test_seven_achievements_defined(self):
-        assert len(ACHIEVEMENTS) == 7
+        assert len(ACHIEVEMENTS) == 10
 
     def test_all_have_required_fields(self):
         for a in ACHIEVEMENTS:
@@ -44,13 +44,13 @@ class TestAchievementEngine:
         with tempfile.TemporaryDirectory() as tmpdir:
             engine, _ = self._make_engine(tmpdir)
             assert engine.unlocked_count == 0
-            assert engine.total_count == 7
+            assert engine.total_count == 10
 
     def test_get_all_achievements(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine, _ = self._make_engine(tmpdir)
             achs = engine.get_all_achievements()
-            assert len(achs) == 7
+            assert len(achs) == 10
             assert all(not a["unlocked"] for a in achs)
 
     def test_manual_unlock(self):

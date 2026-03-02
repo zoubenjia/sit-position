@@ -10,6 +10,8 @@ class UserProfile:
     nickname: str = "匿名用户"
     share_posture: bool = True
     share_exercise: bool = True
+    avatar_url: str = ""
+    auth_provider: str = "device"  # device, google
 
 
 @dataclass
@@ -62,3 +64,44 @@ class Challenge:
     opponent_score: float = 0.0
     status: str = "pending"  # pending, active, completed
     winner_id: str = ""
+
+
+@dataclass
+class Battle:
+    id: str = ""
+    creator_id: str = ""
+    opponent_id: str = ""
+    status: str = "invite"  # invite, accepted, countdown, active, finished, expired, cancelled
+    mode: str = "async"  # async, realtime
+    time_limit_seconds: int = 120
+    quality_weight: float = 0.3
+    # 创建者成绩
+    creator_reps: int = 0
+    creator_good_reps: int = 0
+    creator_form_errors: dict = field(default_factory=dict)
+    creator_score: float = 0.0
+    creator_duration_seconds: int = 0
+    creator_finished_at: str = ""
+    # 对手成绩
+    opponent_reps: int = 0
+    opponent_good_reps: int = 0
+    opponent_form_errors: dict = field(default_factory=dict)
+    opponent_score: float = 0.0
+    opponent_duration_seconds: int = 0
+    opponent_finished_at: str = ""
+    # 结果
+    winner_id: str = ""
+    created_at: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    expires_at: str = ""
+
+
+@dataclass
+class BattleResult:
+    """单方对战结果"""
+    reps: int = 0
+    good_reps: int = 0
+    form_errors: dict = field(default_factory=dict)
+    score: float = 0.0
+    duration_seconds: int = 0

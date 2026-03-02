@@ -72,6 +72,30 @@ ACHIEVEMENTS = [
         condition_type="single_day",
         condition_value=7,  # 7 点
     ),
+    Achievement(
+        id="first_battle",
+        name="初次对战",
+        description="完成第一场俯卧撑对战",
+        icon="⚔️",
+        condition_type="action_count",
+        condition_value=1,
+    ),
+    Achievement(
+        id="battle_winner",
+        name="胜利者",
+        description="赢得一场俯卧撑对战",
+        icon="🏆",
+        condition_type="action_count",
+        condition_value=1,
+    ),
+    Achievement(
+        id="battle_streak_3",
+        name="三连胜",
+        description="连续赢得 3 场俯卧撑对战",
+        icon="🔥",
+        condition_type="streak",
+        condition_value=3,
+    ),
 ]
 
 ACHIEVEMENTS_MAP = {a.id: a for a in ACHIEVEMENTS}

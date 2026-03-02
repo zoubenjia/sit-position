@@ -131,4 +131,4 @@ class TestEvaluatePosture:
         landmarks = _make_landmarks()
         thresholds = {"shoulder": 99, "neck": 99, "torso": 99}
         _, details, _ = evaluate_posture(landmarks, thresholds)
-        assert set(details.keys()) == {"shoulder", "neck", "torso"}
+        assert set(details.keys()) == {"shoulder", "neck", "torso", "head_tilt"}

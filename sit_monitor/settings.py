@@ -38,6 +38,8 @@ class Settings:
     supabase_refresh_token: str = ""
     # Auth
     auth_provider: str = "device"  # device, google
+    # UI
+    simple_mode: bool = True  # True=精简菜单, False=完整菜单
 
     def ensure_device_id(self):
         """首次启动时自动生成设备 ID 并保存"""
