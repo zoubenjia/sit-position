@@ -69,10 +69,7 @@
 ```bash
 git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
-bash setup.sh                     # 搭建环境（Python 3.12 + 依赖 + 模型）
-source .venv/bin/activate
-python sit_monitor.py --debug     # debug 模式验证（首次运行会请求摄像头权限）
-python sit_monitor.py --auto-pause  # 正式使用
+bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
 
 ### Windows
@@ -80,10 +77,7 @@ python sit_monitor.py --auto-pause  # 正式使用
 ```powershell
 git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
-powershell -ExecutionPolicy Bypass -File setup.ps1   # 搭建环境
-.venv\Scripts\activate
-python sit_monitor.py --debug     # debug 模式验证
-python sit_monitor.py --auto-pause  # 正式使用
+powershell -ExecutionPolicy Bypass -File setup.ps1    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
 
 ## 后台服务
