@@ -46,6 +46,8 @@ class TrayApp(rumps.App):
     def _build_menu(self):
         s = self.settings
         self.menu = [
+            rumps.MenuItem("✓ 姿势良好", callback=None),
+            None,
             rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
             rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
             None,
@@ -103,6 +105,29 @@ class TrayApp(rumps.App):
         self._details = details
         self._set_icon(state)
         self._update_stats_menu()
+        self._update_posture_hint(state, details)
+
+    def _update_posture_hint(self, state, details):
+        """实时更新菜单顶部的姿势提示"""
+        try:
+            hint_item = self.menu["✓ 姿势良好"]
+        except KeyError:
+            return
+
+        if state == "good":
+            hint_item.title = "✓ 姿势良好"
+        elif state == "bad":
+            reasons = details.get("reasons", [])
+            if reasons:
+                hint_item.title = "⚠ " + "；".join(reasons)
+            else:
+                hint_item.title = "⚠ 请纠正坐姿"
+        elif state == "away":
+            hint_item.title = "— 未检测到人"
+        elif state == "camera_wait":
+            hint_item.title = "⏳ 等待摄像头"
+        elif state == "stopped":
+            hint_item.title = "— 未启动"
 
     def _update_stats_menu(self):
         stats = self.monitor.stats if self.monitor else None

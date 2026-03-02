@@ -10,9 +10,9 @@ SETTINGS_PATH = os.path.join(SCRIPT_DIR, "settings.json")
 
 @dataclass
 class Settings:
-    shoulder_threshold: float = 7.0
-    neck_threshold: float = 10.0
-    torso_threshold: float = 5.0
+    shoulder_threshold: float = 10.0
+    neck_threshold: float = 20.0
+    torso_threshold: float = 8.0
     interval: float = 5.0
     bad_seconds: int = 30
     cooldown: int = 180
@@ -55,11 +55,11 @@ class Settings:
 
     def apply_args(self, args):
         """用 CLI 参数覆盖设置（CLI 优先但不保存到文件）"""
-        if args.shoulder_threshold != 7.0:
+        if args.shoulder_threshold != 10.0:
             self.shoulder_threshold = args.shoulder_threshold
-        if args.neck_threshold != 10.0:
+        if args.neck_threshold != 20.0:
             self.neck_threshold = args.neck_threshold
-        if args.torso_threshold != 5.0:
+        if args.torso_threshold != 8.0:
             self.torso_threshold = args.torso_threshold
         if args.interval != 5.0:
             self.interval = args.interval
