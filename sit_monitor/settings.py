@@ -24,6 +24,11 @@ class Settings:
     auto_pause: bool = False
     camera: int = 0
     browser: str = ""
+    # Fatigue detection
+    fatigue_enabled: bool = True
+    ear_threshold: float = 0.2       # EAR < 此值 = 闭眼
+    mar_threshold: float = 0.6       # MAR > 此值 = 张嘴
+    fatigue_cooldown: int = 300      # 疲劳提醒最小间隔（秒）
     # Cloud / Social
     cloud_enabled: bool = False
     nickname: str = "匿名用户"
@@ -31,6 +36,8 @@ class Settings:
     share_posture: bool = True
     share_exercise: bool = True
     supabase_refresh_token: str = ""
+    # Auth
+    auth_provider: str = "device"  # device, google
 
     def ensure_device_id(self):
         """首次启动时自动生成设备 ID 并保存"""

@@ -63,6 +63,10 @@ class TrayApp(rumps.App):
             rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
             None,
             rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
+            [rumps.MenuItem("⚔️ Push-up Battle"), [
+                rumps.MenuItem("⚡ Quick Battle", callback=self._quick_battle),
+                rumps.MenuItem("📋 My Battles", callback=self._show_battles),
+            ]],
             None,
             rumps.MenuItem("Statistics", callback=None),
             [rumps.MenuItem("Stats"), [
@@ -97,13 +101,18 @@ class TrayApp(rumps.App):
                     f"{'☑' if s.auto_pause else '☐'} Auto-pause",
                     callback=self._toggle_auto_pause,
                 ),
+                None,
+                rumps.MenuItem(
+                    f"{'☑' if s.fatigue_enabled else '☐'} Fatigue Detection",
+                    callback=self._toggle_fatigue,
+                ),
             ]],
             None,
             [rumps.MenuItem("🌐 Social"), [
                 rumps.MenuItem("📊 Leaderboard (Today)", callback=self._show_leaderboard_daily),
                 rumps.MenuItem("📊 Leaderboard (Week)", callback=self._show_leaderboard_weekly),
                 None,
-                rumps.MenuItem("🏅 My Achievements (0/7)", callback=self._show_achievements),
+                rumps.MenuItem("🏅 My Achievements (0/10)", callback=self._show_achievements),
                 rumps.MenuItem("⚔️ Challenges", callback=self._show_challenges),
                 None,
                 rumps.MenuItem("🔄 Sync Now", callback=self._sync_now),
@@ -112,6 +121,11 @@ class TrayApp(rumps.App):
                     f"{'☑' if s.share_posture else '☐'} Share Data",
                     callback=self._toggle_share,
                 ),
+            ]],
+            [rumps.MenuItem("🔐 Account"), [
+                rumps.MenuItem(f"Auth: {s.auth_provider}", callback=None),
+                rumps.MenuItem("🔗 Link Google", callback=self._link_google),
+                rumps.MenuItem("🔓 Unlink", callback=self._unlink_provider),
             ]],
             None,
             rumps.MenuItem(
@@ -157,14 +171,23 @@ class TrayApp(rumps.App):
         except KeyError:
             return
 
+        fatigue = details.get("fatigue")
+        fatigue_suffix = ""
+        if fatigue:
+            fl = fatigue.get("level", "")
+            if fl == "very_tired":
+                fatigue_suffix = " | 😴 非常疲劳"
+            elif fl == "tired":
+                fatigue_suffix = " | 🥱 疲劳"
+
         if state == "good":
-            hint_item.title = "✓ 姿势良好"
+            hint_item.title = "✓ 姿势良好" + fatigue_suffix
         elif state == "bad":
             reasons = details.get("reasons", [])
             if reasons:
-                hint_item.title = "⚠ " + "；".join(reasons)
+                hint_item.title = "⚠ " + "；".join(reasons) + fatigue_suffix
             else:
-                hint_item.title = "⚠ 请纠正坐姿"
+                hint_item.title = "⚠ 请纠正坐姿" + fatigue_suffix
         elif state == "away":
             hint_item.title = "— 未检测到人"
         elif state == "camera_wait":
@@ -372,6 +395,15 @@ class TrayApp(rumps.App):
         self.settings.save()
         sender.title = f"{'☑' if self.settings.auto_pause else '☐'} Auto-pause"
 
+    def _toggle_fatigue(self, sender):
+        self.settings.fatigue_enabled = not self.settings.fatigue_enabled
+        self.settings.save()
+        sender.title = f"{'☑' if self.settings.fatigue_enabled else '☐'} Fatigue Detection"
+        if self.settings.fatigue_enabled:
+            rumps.notification("Sit Monitor", "疲劳检测已开启", "将在下次启动监控时生效")
+        else:
+            rumps.notification("Sit Monitor", "疲劳检测已关闭", "")
+
     # --- Cloud / Social ---
 
     def _init_cloud(self):
@@ -530,6 +562,147 @@ class TrayApp(rumps.App):
         self.settings.share_exercise = self.settings.share_posture
         self.settings.save()
         sender.title = f"{'☑' if self.settings.share_posture else '☐'} Share Data"
+
+    # --- Battle ---
+
+    def _quick_battle(self, _):
+        """快速对战：从排行榜选择对手"""
+        if not self._cloud_client:
+            rumps.alert("Battle", "请先开启 Enable Cloud")
+            return
+        try:
+            today = str(date.today())
+            entries = self._cloud_client.leaderboard_daily(today)
+            others = [e for e in entries if e.user_id != self._cloud_client.user_id]
+            if not others:
+                rumps.alert("⚔️ 对战", "排行榜上没有其他用户，无法发起对战")
+                return
+            lines = ["选择对手（输入序号）："]
+            for i, e in enumerate(others[:10], 1):
+                lines.append(f"  {i}. {e.nickname} (良好率 {e.good_pct}%)")
+            resp = rumps.Window(
+                title="⚔️ Quick Battle",
+                message="\n".join(lines),
+                default_text="1",
+                ok="发起对战",
+                cancel="取消",
+            ).run()
+            if resp.clicked and resp.text.strip():
+                try:
+                    idx = int(resp.text.strip()) - 1
+                    if 0 <= idx < len(others):
+                        opponent = others[idx]
+                        result = self._cloud_client.create_battle(opponent.user_id)
+                        if result:
+                            rumps.notification("Sit Monitor", "⚔️ 对战已发起",
+                                               f"向 {opponent.nickname} 发起了俯卧撑对战")
+                        else:
+                            rumps.alert("对战", "创建对战失败")
+                except (ValueError, IndexError):
+                    rumps.alert("对战", "无效的选择")
+        except Exception as e:
+            rumps.alert("对战错误", str(e))
+
+    def _show_battles(self, _):
+        """显示我的对战列表"""
+        if not self._cloud_client:
+            rumps.alert("Battle", "请先开启 Enable Cloud")
+            return
+        try:
+            battles = self._cloud_client.list_my_battles()
+            if not battles:
+                rumps.alert("⚔️ 对战", "暂无对战\n\n通过 Quick Battle 或 MCP 工具发起对战")
+                return
+            lines = []
+            uid = self._cloud_client.user_id
+            for b in battles[:10]:
+                status_icon = {
+                    "invite": "📨", "accepted": "✅", "active": "🏃",
+                    "finished": "🏁", "expired": "⏰", "cancelled": "❌",
+                }.get(b.get("status"), "?")
+                # 显示对手
+                is_creator = b.get("creator_id") == uid
+                role = "发起" if is_creator else "收到"
+                my_score = b.get("creator_score", 0) if is_creator else b.get("opponent_score", 0)
+                opp_score = b.get("opponent_score", 0) if is_creator else b.get("creator_score", 0)
+                winner = b.get("winner_id", "")
+                win_text = ""
+                if b.get("status") == "finished":
+                    if winner == uid:
+                        win_text = " 🏆 胜"
+                    elif winner:
+                        win_text = " 败"
+                    else:
+                        win_text = " 平"
+                lines.append(
+                    f"{status_icon} [{role}] {b.get('status')} | "
+                    f"我:{my_score:.1f} vs 对手:{opp_score:.1f}{win_text}"
+                )
+            rumps.alert(title="⚔️ 我的对战", message="\n".join(lines), ok="好的")
+        except Exception as e:
+            rumps.alert("对战错误", str(e))
+
+    # --- Account ---
+
+    def _link_google(self, _):
+        """绑定 Google 账号"""
+        if not self._cloud_client:
+            rumps.alert("Account", "请先开启 Enable Cloud")
+            return
+        # 提示用户绑定含义
+        resp = rumps.alert(
+            title="🔗 绑定 Google 账号",
+            message=(
+                "绑定后：\n"
+                "• 您的坐姿和运动数据将与 Google 账号关联\n"
+                "• 可在多设备间同步数据\n"
+                "• 随时可以解绑恢复匿名\n\n"
+                "是否继续？"
+            ),
+            ok="继续绑定",
+            cancel="取消",
+        )
+        if resp != 1:
+            return
+        try:
+            from sit_monitor.cloud.social_auth import start_google_oauth
+            result = start_google_oauth(self._cloud_client)
+            if result.get("success"):
+                self.settings.auth_provider = "google"
+                self.settings.save()
+                try:
+                    self.menu["🔐 Account"]["Auth: device"].title = "Auth: google"
+                except Exception:
+                    pass
+                rumps.notification("Sit Monitor", "🔗 Google 账号已绑定", result.get("message", ""))
+            elif result.get("url"):
+                import webbrowser
+                webbrowser.open(result["url"])
+                rumps.notification("Sit Monitor", "🔗 请在浏览器中完成授权", "授权后将自动完成绑定")
+            else:
+                rumps.alert("绑定失败", result.get("error", "未知错误"))
+        except Exception as e:
+            rumps.alert("绑定错误", str(e))
+
+    def _unlink_provider(self, _):
+        """解绑社交账号"""
+        if self.settings.auth_provider == "device":
+            rumps.alert("Account", "当前已是匿名（设备）认证")
+            return
+        resp = rumps.alert(
+            title="🔓 解绑社交账号",
+            message=f"当前绑定: {self.settings.auth_provider}\n\n解绑后恢复匿名认证，历史数据保留。",
+            ok="确认解绑",
+            cancel="取消",
+        )
+        if resp == 1:
+            self.settings.auth_provider = "device"
+            self.settings.save()
+            try:
+                self.menu["🔐 Account"][f"Auth: google"].title = "Auth: device"
+            except Exception:
+                pass
+            rumps.notification("Sit Monitor", "🔓 已解绑", "恢复匿名认证")
 
     def _check_achievements(self):
         """定时检查成就，解锁时发通知"""

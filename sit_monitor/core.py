@@ -17,6 +17,7 @@ from sit_monitor.tts import speak
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
+FACE_MODEL_PATH = os.path.join(SCRIPT_DIR, "face_landmarker.task")
 LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
 
 
@@ -88,6 +89,26 @@ class PostureMonitor:
             num_poses=1,
         )
         landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
+
+        # FaceLandmarker 初始化（疲劳检测）
+        face_landmarker = None
+        fatigue_tracker = None
+        last_fatigue_notify_time = 0
+        if s.fatigue_enabled and os.path.exists(FACE_MODEL_PATH):
+            from sit_monitor.fatigue import FatigueTracker
+            face_base = mp.tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH)
+            face_options = mp.tasks.vision.FaceLandmarkerOptions(
+                base_options=face_base,
+                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                min_face_detection_confidence=0.5,
+                min_face_presence_confidence=0.5,
+                num_faces=1,
+            )
+            face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(face_options)
+            fatigue_tracker = FatigueTracker(
+                ear_threshold=s.ear_threshold,
+                mar_threshold=s.mar_threshold,
+            )
 
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
@@ -232,8 +253,40 @@ class PostureMonitor:
                     lm = results.pose_landmarks[0]
                     is_bad, details, reasons = evaluate_posture(lm, thresholds)
 
+                    # --- 疲劳检测 ---
+                    fatigue_level = "normal"
+                    if s.fatigue_enabled and face_landmarker and fatigue_tracker:
+                        face_results = face_landmarker.detect(mp_image)
+                        if face_results.face_landmarks:
+                            fatigue_level = fatigue_tracker.update(
+                                face_results.face_landmarks[0], now
+                            )
+                            # 疲劳提醒
+                            if fatigue_level != "normal" and not snoozed and (now - last_fatigue_notify_time) >= s.fatigue_cooldown:
+                                if fatigue_level == "very_tired":
+                                    fatigue_msg = "你看起来非常疲劳，建议立即休息！"
+                                else:
+                                    fatigue_msg = "检测到疲劳迹象（眨眼频率高/打哈欠），注意休息"
+                                _say_proc = send_notification(
+                                    "疲劳提醒",
+                                    fatigue_msg,
+                                    sound=s.sound,
+                                    use_notification_center=use_nc,
+                                )
+                                log_event(self.logger, "fatigue_alert",
+                                          level=fatigue_level,
+                                          ear=round(fatigue_tracker.ear, 3),
+                                          mar=round(fatigue_tracker.mar, 3),
+                                          blink_rate=round(fatigue_tracker.blink_rate, 1),
+                                          yawn_count=fatigue_tracker.yawn_count,
+                                          pitch=round(fatigue_tracker.pitch, 1),
+                                          sit_minutes=round(sit_minutes, 1))
+                                last_fatigue_notify_time = now
+
                     log_data = {k: round(v, 1) if v is not None else None for k, v in details.items()}
                     log_data["sit_minutes"] = round(sit_minutes, 1)
+                    if fatigue_level != "normal":
+                        log_data["fatigue"] = fatigue_level
                     if is_bad:
                         self.stats.record("bad", now)
                         log_event(self.logger, "bad", reasons=[r for r in reasons], **log_data)
@@ -283,7 +336,17 @@ class PostureMonitor:
                         )
 
                     state = "bad" if is_bad else "good"
-                    self._notify_state(state, details=details, reasons=reasons, sit_minutes=sit_minutes)
+                    fatigue_info = None
+                    if fatigue_tracker and fatigue_level != "normal":
+                        fatigue_info = {
+                            "level": fatigue_level,
+                            "ear": round(fatigue_tracker.ear, 3),
+                            "mar": round(fatigue_tracker.mar, 3),
+                            "blink_rate": round(fatigue_tracker.blink_rate, 1),
+                            "yawn_count": fatigue_tracker.yawn_count,
+                        }
+                    self._notify_state(state, details=details, reasons=reasons,
+                                       sit_minutes=sit_minutes, fatigue=fatigue_info)
 
                     if self.debug:
                         draw_debug(frame, lm, is_bad, details)
@@ -315,6 +378,8 @@ class PostureMonitor:
             print("=" * 40)
 
             landmarker.close()
+            if face_landmarker:
+                face_landmarker.close()
             if cap is not None:
                 cap.release()
             if self.debug:
