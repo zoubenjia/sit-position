@@ -9,6 +9,7 @@ import time
 import rumps
 
 from sit_monitor.core import PostureMonitor
+from sit_monitor.exercise import EXERCISE_REGISTRY, ExerciseMonitor
 from sit_monitor.report import daily_summary_text, weekly_report
 from sit_monitor.settings import Settings
 
@@ -34,6 +35,8 @@ class TrayApp(rumps.App):
         self.debug = debug
         self.monitor = None
         self.monitor_thread = None
+        self._exercise_monitor = None
+        self._exercise_thread = None
         self._state = "stopped"
         self._details = {}
         self._last_daily_report_date = None
@@ -44,6 +47,8 @@ class TrayApp(rumps.App):
         self.menu = [
             rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
             rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
+            None,
+            rumps.MenuItem("🏋️ Pushup Training", callback=self._toggle_pushup),
             None,
             rumps.MenuItem("Statistics", callback=None),
             [rumps.MenuItem("Stats"), [
@@ -147,6 +152,72 @@ class TrayApp(rumps.App):
             self.monitor_thread = None
         self._state = "stopped"
         self._set_icon("stopped")
+
+    # --- Exercise ---
+
+    def _is_exercising(self):
+        return self._exercise_monitor is not None and self._exercise_monitor.running
+
+    def _toggle_pushup(self, sender):
+        if self._is_exercising():
+            self._stop_exercise()
+            sender.title = "🏋️ Pushup Training"
+        else:
+            # 暂停坐姿监控，启动俯卧撑训练
+            was_monitoring = self._is_running()
+            if was_monitoring:
+                self._stop_monitor()
+                try:
+                    self.menu["Start Monitoring"].title = "Start Monitoring"
+                except Exception:
+                    pass
+
+            self._start_exercise("pushup", sender, was_monitoring)
+
+    def _start_exercise(self, exercise_id, sender, resume_posture_after=False):
+        analyzer_cls = EXERCISE_REGISTRY.get(exercise_id)
+        if analyzer_cls is None:
+            rumps.notification("Sit Monitor", "错误", f"未知运动: {exercise_id}")
+            return
+
+        analyzer = analyzer_cls()
+        self._exercise_monitor = ExerciseMonitor(
+            analyzer, camera=self.settings.camera, debug=self.debug,
+        )
+        if not self._exercise_monitor.check_model():
+            rumps.notification("Sit Monitor", "错误", "未找到模型文件")
+            self._exercise_monitor = None
+            return
+
+        sender.title = "⏹ Stop Pushup"
+
+        def run_and_cleanup():
+            self._exercise_monitor.run()
+            # 训练结束后恢复菜单
+            sender.title = "🏋️ Pushup Training"
+            self._exercise_monitor = None
+            self._exercise_thread = None
+            # 训练结束通知
+            reps = getattr(analyzer, 'rep_count', 0)
+            rumps.notification("Sit Monitor", "训练结束", f"完成 {reps} 个{analyzer.exercise_name}")
+            # 恢复坐姿监控
+            if resume_posture_after:
+                self._start_monitor()
+                try:
+                    self.menu["Start Monitoring"].title = "Stop Monitoring"
+                except Exception:
+                    pass
+
+        self._exercise_thread = threading.Thread(target=run_and_cleanup, daemon=True)
+        self._exercise_thread.start()
+
+    def _stop_exercise(self):
+        if self._exercise_monitor:
+            self._exercise_monitor.stop()
+            if self._exercise_thread:
+                self._exercise_thread.join(timeout=10)
+            self._exercise_monitor = None
+            self._exercise_thread = None
 
     # --- Snooze ---
 
@@ -288,6 +359,7 @@ class TrayApp(rumps.App):
 
     @rumps.clicked("Quit")
     def quit_app(self, _):
+        self._stop_exercise()
         self._stop_monitor()
         rumps.quit_application()
 

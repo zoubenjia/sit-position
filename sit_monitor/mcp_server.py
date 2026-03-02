@@ -143,5 +143,76 @@ def posture_get_settings() -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+@mcp.tool()
+def exercise_query_sessions(
+    days: int = 30,
+    exercise_type: str | None = None,
+    limit: int = 20,
+) -> str:
+    """查询运动训练记录，返回训练日期、类型、次数、时长、姿势错误等。
+
+    Args:
+        days: 查询最近多少天的数据，默认 30
+        exercise_type: 过滤运动类型（如 pushup），默认全部
+        limit: 返回会话数上限，默认 20
+    """
+    log_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "logs", "exercise.jsonl",
+    )
+    if not os.path.exists(log_path):
+        return json.dumps({"error": "没有运动训练数据", "sessions": []}, ensure_ascii=False)
+
+    cutoff = datetime.now() - timedelta(days=days)
+    events = []
+    with open(log_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+                ts = datetime.fromisoformat(e["ts"])
+                if ts >= cutoff:
+                    events.append(e)
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    # 将 exercise_start/exercise_stop 配对为会话
+    sessions = []
+    current = None
+    for e in events:
+        evt = e.get("event")
+        ex_type = e.get("exercise", "")
+
+        if exercise_type and ex_type != exercise_type:
+            continue
+
+        if evt == "exercise_start":
+            current = {
+                "start_time": e["ts"],
+                "exercise": ex_type,
+                "reps": [],
+            }
+        elif evt == "rep" and current is not None:
+            current["reps"].append({
+                "count": e.get("count"),
+                "metrics": e.get("metrics", {}),
+            })
+        elif evt == "exercise_stop":
+            session = {
+                "start_time": current["start_time"] if current else e["ts"],
+                "exercise": ex_type,
+                "total_reps": e.get("total_reps", 0),
+                "duration_seconds": e.get("duration_seconds", 0),
+                "form_errors": e.get("form_errors", {}),
+            }
+            sessions.append(session)
+            current = None
+
+    sessions = sessions[-limit:]
+    return json.dumps({"total_sessions": len(sessions), "sessions": sessions}, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     mcp.run()

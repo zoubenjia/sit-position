@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import subprocess
 import time
 from datetime import datetime
 
@@ -222,7 +223,7 @@ class PostureMonitor:
                                 msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来活动、喝杯水）"
                             send_notification(
                                 "坐姿提醒",
-                                f"请调整姿势：{msg}",
+                                f"请纠正姿势：{msg}",
                                 sound=s.sound,
                                 use_notification_center=use_nc,
                             )
@@ -237,6 +238,12 @@ class PostureMonitor:
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
                     else:
+                        # bad→good 正向反馈
+                        if bad_start_time is not None and s.sound:
+                            subprocess.Popen(
+                                ["say", "-v", "Tingting", "坐姿很好，继续保持"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            )
                         bad_start_time = None
                         status_line = (
                             f"✓ 姿势良好 | 就坐 {sit_minutes:.0f}min | "

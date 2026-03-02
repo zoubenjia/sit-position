@@ -6,7 +6,10 @@ import sys
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="坐姿监控：检测不良坐姿并通知")
+    p = argparse.ArgumentParser(description="坐姿监控 & 运动指导")
+    p.add_argument("mode", nargs="?", default="posture",
+                   choices=["posture", "pushup"],
+                   help="运行模式: posture=坐姿监控(默认), pushup=俯卧撑训练")
     p.add_argument("--camera", type=int, default=0, help="摄像头索引 (默认: 0)")
     p.add_argument("--interval", type=float, default=5.0, help="检测间隔/秒 (默认: 5.0)")
     p.add_argument("--bad-seconds", type=int, default=30, help="连续坏姿势多少秒后通知 (默认: 30)")
@@ -24,9 +27,8 @@ def parse_args():
     return p.parse_args()
 
 
-def main():
-    args = parse_args()
-
+def _run_posture(args):
+    """坐姿监控模式"""
     from sit_monitor.settings import Settings
     settings = Settings.load()
     settings.apply_args(args)
@@ -53,6 +55,43 @@ def main():
         signal.signal(signal.SIGTERM, on_signal)
 
         monitor.run()
+
+
+def _run_exercise(args):
+    """运动训练模式"""
+    from sit_monitor.exercise import EXERCISE_REGISTRY, ExerciseMonitor
+
+    analyzer_cls = EXERCISE_REGISTRY.get(args.mode)
+    if analyzer_cls is None:
+        print(f"错误: 未知运动模式 '{args.mode}'")
+        sys.exit(1)
+
+    analyzer = analyzer_cls()
+    monitor = ExerciseMonitor(analyzer, camera=args.camera, debug=args.debug)
+
+    if not monitor.check_model():
+        print("错误: 未找到模型文件")
+        print("请运行 bash setup.sh 或手动下载:")
+        print("  curl -sSL -o pose_landmarker_lite.task \\")
+        print("    https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task")
+        sys.exit(1)
+
+    def on_signal(sig, _frame):
+        monitor.stop()
+
+    signal.signal(signal.SIGINT, on_signal)
+    signal.signal(signal.SIGTERM, on_signal)
+
+    monitor.run()
+
+
+def main():
+    args = parse_args()
+
+    if args.mode == "posture":
+        _run_posture(args)
+    else:
+        _run_exercise(args)
 
 
 if __name__ == "__main__":
