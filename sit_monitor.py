@@ -35,6 +35,7 @@ def parse_args():
     p.add_argument("--debug", action="store_true", help="显示摄像头画面和骨架叠加")
     p.add_argument("--auto-pause", action="store_true", help="人离开时自动暂停视频，回来时恢复")
     p.add_argument("--away-seconds", type=float, default=3.0, help="离开多少秒后暂停 (默认: 3)")
+    p.add_argument("--browser", type=str, default=None, help="浏览器名称 (默认: 自动检测，支持 Firefox/Chrome/Safari/Arc)")
     p.add_argument("--shoulder-threshold", type=float, default=10.0, help="肩膀倾斜角阈值/度 (默认: 10)")
     p.add_argument("--neck-threshold", type=float, default=15.0, help="头部前倾角阈值/度 (默认: 15)")
     p.add_argument("--torso-threshold", type=float, default=8.0, help="躯干前倾角阈值/度 (默认: 8)")
@@ -121,8 +122,10 @@ def evaluate_posture(landmarks, thresholds):
 
 def send_notification(title, message):
     """通过 osascript 弹窗提醒，10 秒后自动关闭"""
+    safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
+    safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
     script = (
-        f'display dialog "{message}" with title "{title}" '
+        f'display dialog "{safe_msg}" with title "{safe_title}" '
         f'buttons {{"好的"}} default button 1 giving up after 10'
     )
     subprocess.Popen(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -130,10 +133,29 @@ def send_notification(title, message):
 
 # --------------- 媒体播放控制 ---------------
 
-def media_play_pause():
-    """激活 Firefox 并发送空格键来暂停/恢复视频"""
+_BROWSERS = ["Firefox", "Google Chrome", "Safari", "Arc"]
+
+
+def _detect_browser():
+    """检测当前运行的浏览器"""
+    result = subprocess.run(
+        ["osascript", "-e", 'tell application "System Events" to get name of every process whose background only is false'],
+        capture_output=True, text=True,
+    )
+    running = result.stdout.strip()
+    for b in _BROWSERS:
+        if b in running:
+            return b
+    return None
+
+
+def media_play_pause(browser=None):
+    """激活浏览器并发送空格键来暂停/恢复视频"""
+    target = browser or _detect_browser()
+    if not target:
+        return
     script = (
-        'tell application "Firefox" to activate\n'
+        f'tell application "{target}" to activate\n'
         'delay 0.3\n'
         'tell application "System Events" to key code 49'
     )
@@ -244,7 +266,8 @@ def main():
                     continue
                 print(f"\r{'📷 摄像头已连接，开始监控...':<80}", end="", flush=True)
 
-            if now - last_check_time < args.interval:
+            wait = args.interval - (now - last_check_time)
+            if wait > 0:
                 if args.debug:
                     cap.grab()
                     ret, frame = cap.retrieve()
@@ -254,7 +277,7 @@ def main():
                             break
                     time.sleep(0.03)
                 else:
-                    time.sleep(0.5)
+                    time.sleep(min(wait, 1.0))
                 continue
 
             last_check_time = now
@@ -284,7 +307,7 @@ def main():
                         away_start_time = now
                     away_duration = now - away_start_time
                     if not media_paused and away_duration >= args.away_seconds:
-                        media_play_pause()
+                        media_play_pause(args.browser)
                         media_paused = True
                         status_line = f"⏸ 已暂停播放（离开 {away_duration:.0f}s）"
                     else:
@@ -293,7 +316,7 @@ def main():
                     status_line = "未检测到人体"
             else:
                 if args.auto_pause and media_paused:
-                    media_play_pause()
+                    media_play_pause(args.browser)
                     media_paused = False
                 away_start_time = None
 
