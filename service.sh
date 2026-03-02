@@ -98,19 +98,24 @@ do_start() {
 }
 
 do_stop() {
+    local stopped=false
     if _tray_running; then
         kill "$(cat "$TRAY_PID_FILE")" 2>/dev/null
         rm -f "$TRAY_PID_FILE"
-        echo "已停止"
-        return
+        stopped=true
     fi
     if command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
         tmux kill-session -t $SESSION
-        echo "已停止 (tmux)"
-        return
+        stopped=true
     fi
+    # 兜底：杀掉所有残留的 sit_monitor tray 进程（防止双图标）
+    pkill -f "sit_monitor.*--tray" 2>/dev/null && stopped=true
     rm -f "$TRAY_PID_FILE"
-    echo "未在运行"
+    if $stopped; then
+        echo "已停止"
+    else
+        echo "未在运行"
+    fi
 }
 
 do_status() {
