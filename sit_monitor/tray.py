@@ -4,13 +4,15 @@ import os
 import subprocess
 import sys
 import threading
+import time
 
 import rumps
 
 from sit_monitor.core import PostureMonitor
+from sit_monitor.report import daily_summary_text, weekly_report
 from sit_monitor.settings import Settings
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,12 +36,14 @@ class TrayApp(rumps.App):
         self.monitor_thread = None
         self._state = "stopped"
         self._details = {}
+        self._last_daily_report_date = None
         self._build_menu()
 
     def _build_menu(self):
         s = self.settings
         self.menu = [
             rumps.MenuItem("Start Monitoring", callback=self._toggle_monitor),
+            rumps.MenuItem("Pause Alerts 10min", callback=self._snooze),
             None,
             rumps.MenuItem("Statistics", callback=None),
             [rumps.MenuItem("Stats"), [
@@ -47,6 +51,7 @@ class TrayApp(rumps.App):
                 rumps.MenuItem("姿势不良: 0 min", callback=None),
                 rumps.MenuItem("提醒次数: 0", callback=None),
             ]],
+            rumps.MenuItem("View Report", callback=self._view_report),
             None,
             [rumps.MenuItem("Settings"), [
                 rumps.MenuItem(f"Shoulder: {s.shoulder_threshold}°", callback=None),
@@ -72,7 +77,7 @@ class TrayApp(rumps.App):
             ]],
             None,
             rumps.MenuItem("Check for Updates", callback=self._check_update),
-            rumps.MenuItem(f"About Sit Monitor v{VERSION}", callback=self._show_about),
+            rumps.MenuItem(f"About v{VERSION}", callback=self._show_about),
             None,
         ]
         self._update_stats_menu()
@@ -143,6 +148,39 @@ class TrayApp(rumps.App):
         self._state = "stopped"
         self._set_icon("stopped")
 
+    # --- Snooze ---
+
+    def _snooze(self, sender):
+        if self.monitor:
+            self.monitor.snooze_until = time.time() + 600  # 10 分钟
+            rumps.notification("Sit Monitor", "已暂停提醒", "10 分钟内不会发送提醒")
+            sender.title = "Alerts paused (10min)"
+            # 10 分钟后恢复菜单文字
+            def restore():
+                time.sleep(600)
+                sender.title = "Pause Alerts 10min"
+            threading.Thread(target=restore, daemon=True).start()
+
+    # --- Report ---
+
+    def _view_report(self, _):
+        text = weekly_report()
+        rumps.alert(title="Sit Monitor — 周报", message=text, ok="好的")
+
+    def _check_daily_report(self, _):
+        """每分钟检查一次，如果日期变了就发送昨日摘要"""
+        from datetime import date, timedelta
+        today = date.today()
+        if self._last_daily_report_date is None:
+            self._last_daily_report_date = today
+            return
+        if today != self._last_daily_report_date:
+            self._last_daily_report_date = today
+            yesterday = today - timedelta(days=1)
+            text = daily_summary_text(yesterday)
+            if "暂无" not in text:
+                rumps.notification("Sit Monitor", "昨日坐姿日报", text)
+
     # --- Settings ---
 
     def _adjust(self, attr, delta):
@@ -182,11 +220,9 @@ class TrayApp(rumps.App):
                     rumps.notification("Sit Monitor", "检查更新", "已是最新版本")
                     return
 
-                # 拉取更新
                 subprocess.run(["git", "pull", "origin", "main"], cwd=PROJECT_DIR,
                                capture_output=True, timeout=30)
 
-                # 检查依赖变化
                 diff = subprocess.run(
                     ["git", "diff", local, remote, "--name-only"],
                     cwd=PROJECT_DIR, capture_output=True, text=True,
@@ -197,14 +233,27 @@ class TrayApp(rumps.App):
                     subprocess.run(["uv", "pip", "install", "--python", python, "-r", req],
                                    capture_output=True, timeout=60)
 
-                # 获取更新说明
                 log = subprocess.run(
                     ["git", "log", f"{local}..{remote}", "--oneline"],
                     cwd=PROJECT_DIR, capture_output=True, text=True,
                 ).stdout.strip()
 
-                rumps.notification("Sit Monitor", "更新完成，请重启",
+                rumps.notification("Sit Monitor", "更新完成，正在重启...",
                                    log or "已拉取最新代码")
+
+                # 自动重启：停止监控后 re-exec
+                self._stop_monitor()
+                time.sleep(1)
+                python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+                script = os.path.join(PROJECT_DIR, "sit_monitor.py")
+                args = [python, script, "--tray"]
+                if self.debug:
+                    args.append("--debug")
+                # 启动新进程
+                subprocess.Popen(args)
+                # 退出当前进程
+                rumps.quit_application()
+
             except Exception as e:
                 rumps.notification("Sit Monitor", "更新失败", str(e))
 
@@ -213,7 +262,6 @@ class TrayApp(rumps.App):
     # --- About ---
 
     def _show_about(self, _):
-        # 获取当前 commit
         try:
             commit = subprocess.run(
                 ["git", "log", "--oneline", "-1"], cwd=PROJECT_DIR,
@@ -252,5 +300,10 @@ class TrayApp(rumps.App):
                 self.menu["Start Monitoring"].title = "Stop Monitoring"
             except Exception:
                 pass
+
+        # 每 60 秒检查是否需要发送每日报告
+        @rumps.timer(60)
+        def daily_report_check(t):
+            self._check_daily_report(t)
 
         super().run()

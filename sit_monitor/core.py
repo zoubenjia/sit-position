@@ -51,6 +51,7 @@ class PostureMonitor:
         self.on_state_change = on_state_change
 
         self.running = False
+        self.snooze_until = 0  # 暂停提醒截止时间戳
         self.logger = setup_logging()
         self.stats = Stats()
 
@@ -186,7 +187,8 @@ class PostureMonitor:
                     sit_minutes = (now - sit_start_time) / 60
 
                     sit_max_seconds = s.sit_max_minutes * 60
-                    if (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
+                    snoozed = now < self.snooze_until
+                    if not snoozed and (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
                         send_notification(
                             "久坐提醒",
                             f"你已经连续坐了 {sit_minutes:.0f} 分钟，起来活动一下、喝杯水吧！",
@@ -214,7 +216,7 @@ class PostureMonitor:
                             bad_start_time = now
                         bad_duration = now - bad_start_time
 
-                        if bad_duration >= s.bad_seconds and (now - last_notify_time) >= s.cooldown:
+                        if not snoozed and bad_duration >= s.bad_seconds and (now - last_notify_time) >= s.cooldown:
                             msg = "、".join(reasons)
                             if sit_minutes >= s.sit_max_minutes:
                                 msg += f"\n（已连续就坐 {sit_minutes:.0f} 分钟，建议起来活动、喝杯水）"

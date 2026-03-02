@@ -7,18 +7,14 @@ SCRIPT="$PROJECT_DIR/sit_monitor.py"
 LOG_DIR="$PROJECT_DIR/logs"
 SESSION="sit-monitor"
 TRAY_PID_FILE="$PROJECT_DIR/.tray.pid"
-# 自动检测用户 shell 配置文件
-case "$(basename "$SHELL")" in
-    zsh)  SHELL_RC="$HOME/.zshrc" ;;
-    bash) SHELL_RC="$HOME/.bashrc" ;;
-    *)    SHELL_RC="$HOME/.profile" ;;
-esac
-MARKER="# sit-monitor auto-start"
+PLIST_NAME="com.zoubenjia.sit-monitor"
+PLIST_SRC="$PROJECT_DIR/$PLIST_NAME.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
 
 usage() {
     echo "用法: $0 {install|uninstall|start|stop|restart|status|log|update}"
     echo ""
-    echo "  install   安装自启动（登录时自动启动托盘）"
+    echo "  install   安装 LaunchAgent 开机自启动"
     echo "  uninstall 卸载自启动"
     echo "  start     启动（托盘模式，后台运行）"
     echo "  stop      停止"
@@ -40,34 +36,41 @@ do_install() {
     fi
 
     mkdir -p "$LOG_DIR"
+    mkdir -p "$HOME/Library/LaunchAgents"
 
-    # 检查是否已安装
-    if grep -q "$MARKER" "$SHELL_RC" 2>/dev/null; then
-        echo "已安装，跳过"
-        return
-    fi
+    # 生成 plist（替换路径占位符）
+    sed \
+        -e "s|__PYTHON__|$PYTHON|g" \
+        -e "s|__SCRIPT__|$SCRIPT|g" \
+        -e "s|__LOG_DIR__|$LOG_DIR|g" \
+        "$PLIST_SRC" > "$PLIST_DST"
 
-    cat >> "$SHELL_RC" << EOF
+    # 加载 LaunchAgent
+    launchctl unload "$PLIST_DST" 2>/dev/null || true
+    launchctl load "$PLIST_DST"
 
-$MARKER
-if [ -z "\${TMUX:-}" ]; then
-    bash "$PROJECT_DIR/service.sh" start 2>/dev/null &
-fi
-EOF
-
-    echo "已添加自启动到 $SHELL_RC"
-    echo "下次打开终端时会自动启动坐姿监控托盘"
+    echo "已安装 LaunchAgent: $PLIST_DST"
+    echo "登录时会自动启动坐姿监控托盘"
     echo "或运行 '$0 start' 立即启动"
 }
 
 do_uninstall() {
     do_stop 2>/dev/null || true
-    if grep -q "$MARKER" "$SHELL_RC" 2>/dev/null; then
-        sed -i '' "/$MARKER/,+4d" "$SHELL_RC"
-        echo "已从 $SHELL_RC 移除自启动"
-    else
-        echo "未安装自启动"
+
+    # 卸载 LaunchAgent
+    if [ -f "$PLIST_DST" ]; then
+        launchctl unload "$PLIST_DST" 2>/dev/null || true
+        rm -f "$PLIST_DST"
+        echo "已卸载 LaunchAgent"
     fi
+
+    # 兼容清理旧的 shell rc 方式
+    for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+        if grep -q "# sit-monitor auto-start" "$rc" 2>/dev/null; then
+            sed -i '' '/# sit-monitor auto-start/,+4d' "$rc"
+            echo "已从 $rc 移除旧自启动"
+        fi
+    done
 }
 
 do_start() {
@@ -83,21 +86,18 @@ do_start() {
         return
     fi
 
-    # 托盘模式需要 GUI 环境，用 nohup 后台启动
     nohup "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
     echo $! > "$TRAY_PID_FILE"
     echo "已启动托盘模式 (PID: $!)"
 }
 
 do_stop() {
-    # 停 tray 进程
     if _tray_running; then
         kill "$(cat "$TRAY_PID_FILE")" 2>/dev/null
         rm -f "$TRAY_PID_FILE"
         echo "已停止"
         return
     fi
-    # 兼容旧的 tmux session
     if command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
         tmux kill-session -t $SESSION
         echo "已停止 (tmux)"
@@ -110,9 +110,8 @@ do_stop() {
 do_status() {
     if _tray_running; then
         echo "状态: 运行中 (托盘模式, PID: $(cat "$TRAY_PID_FILE"))"
-    elif command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; then
-        echo "状态: 运行中 (tmux session: $SESSION)"
-        echo "查看: tmux attach -t $SESSION"
+    elif [ -f "$PLIST_DST" ]; then
+        echo "状态: LaunchAgent 已安装，但未运行"
     else
         echo "状态: 未运行"
     fi
@@ -145,14 +144,12 @@ do_update() {
     echo "发现新版本，更新中..."
     git pull origin main
 
-    # 检查依赖是否有变化
     if git diff "$LOCAL" "$REMOTE" --name-only | grep -q "requirements.txt"; then
         echo "依赖有变化，重新安装..."
         uv pip install --python "$PYTHON" -r requirements.txt
     fi
 
-    # 如果正在运行，自动重启
-    if _tray_running || { command -v tmux &>/dev/null && tmux has-session -t $SESSION 2>/dev/null; }; then
+    if _tray_running; then
         echo "重启服务..."
         do_stop
         sleep 1
