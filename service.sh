@@ -9,6 +9,11 @@ SESSION="sit-monitor"
 SHELL_RC="$HOME/.bashrc"
 MARKER="# sit-monitor auto-start"
 
+if ! command -v tmux &>/dev/null; then
+    echo "错误: 需要 tmux。安装方式: brew install tmux"
+    exit 1
+fi
+
 usage() {
     echo "用法: $0 {install|uninstall|start|stop|restart|status|log|update}"
     echo ""

@@ -6,10 +6,23 @@ VENV_DIR=".venv"
 
 echo "=== 坐姿监控程序 - 环境搭建 ==="
 
-# 检查 uv 是否安装
+# 检查依赖工具
 if ! command -v uv &>/dev/null; then
-    echo "错误: 未找到 uv，请先安装: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    exit 1
+    echo "未找到 uv，正在安装..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+if ! command -v tmux &>/dev/null; then
+    echo "提示: 未找到 tmux（后台运行需要，非必须）"
+    if command -v brew &>/dev/null; then
+        read -p "是否安装 tmux？[y/N] " yn
+        if [[ "$yn" =~ ^[Yy]$ ]]; then
+            brew install tmux
+        fi
+    else
+        echo "  安装方式: brew install tmux"
+    fi
 fi
 
 # 创建虚拟环境
