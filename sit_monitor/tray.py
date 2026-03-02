@@ -35,12 +35,13 @@ class TrayApp(rumps.App):
         self.debug = debug
         self.monitor = None
         self.monitor_thread = None
-        self._exercise_monitor = None
-        self._exercise_thread = None
+        self._exercise_proc = None
         self._state = "stopped"
         self._details = {}
         self._last_daily_report_date = None
+        self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         self._build_menu()
+        self._start_auto_update_check()
 
     def _build_menu(self):
         s = self.settings
@@ -156,7 +157,7 @@ class TrayApp(rumps.App):
     # --- Exercise ---
 
     def _is_exercising(self):
-        return self._exercise_monitor is not None and self._exercise_monitor.running
+        return self._exercise_proc is not None and self._exercise_proc.poll() is None
 
     def _toggle_pushup(self, sender):
         if self._is_exercising():
@@ -175,32 +176,18 @@ class TrayApp(rumps.App):
             self._start_exercise("pushup", sender, was_monitoring)
 
     def _start_exercise(self, exercise_id, sender, resume_posture_after=False):
-        analyzer_cls = EXERCISE_REGISTRY.get(exercise_id)
-        if analyzer_cls is None:
-            rumps.notification("Sit Monitor", "错误", f"未知运动: {exercise_id}")
-            return
-
-        analyzer = analyzer_cls()
-        self._exercise_monitor = ExerciseMonitor(
-            analyzer, camera=self.settings.camera, debug=True,
-        )
-        if not self._exercise_monitor.check_model():
-            rumps.notification("Sit Monitor", "错误", "未找到模型文件")
-            self._exercise_monitor = None
-            return
-
+        # 以独立子进程启动（cv2.imshow 需要主线程）
+        python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+        args = [python, "-m", "sit_monitor", exercise_id,
+                "--camera", str(self.settings.camera), "--debug"]
+        self._exercise_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
         sender.title = "⏹ Stop Pushup"
 
-        def run_and_cleanup():
-            self._exercise_monitor.run()
-            # 训练结束后恢复菜单
+        def wait_and_cleanup():
+            self._exercise_proc.wait()
             sender.title = "🏋️ Pushup Training"
-            self._exercise_monitor = None
-            self._exercise_thread = None
-            # 训练结束通知
-            reps = getattr(analyzer, 'rep_count', 0)
-            rumps.notification("Sit Monitor", "训练结束", f"完成 {reps} 个{analyzer.exercise_name}")
-            # 恢复坐姿监控
+            self._exercise_proc = None
+            rumps.notification("Sit Monitor", "训练结束", "俯卧撑训练已完成")
             if resume_posture_after:
                 self._start_monitor()
                 try:
@@ -208,16 +195,16 @@ class TrayApp(rumps.App):
                 except Exception:
                     pass
 
-        self._exercise_thread = threading.Thread(target=run_and_cleanup, daemon=True)
-        self._exercise_thread.start()
+        threading.Thread(target=wait_and_cleanup, daemon=True).start()
 
     def _stop_exercise(self):
-        if self._exercise_monitor:
-            self._exercise_monitor.stop()
-            if self._exercise_thread:
-                self._exercise_thread.join(timeout=10)
-            self._exercise_monitor = None
-            self._exercise_thread = None
+        if self._exercise_proc and self._exercise_proc.poll() is None:
+            self._exercise_proc.terminate()
+            try:
+                self._exercise_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._exercise_proc.kill()
+            self._exercise_proc = None
 
     # --- Snooze ---
 
@@ -274,6 +261,37 @@ class TrayApp(rumps.App):
         self.settings.auto_pause = not self.settings.auto_pause
         self.settings.save()
         sender.title = f"{'☑' if self.settings.auto_pause else '☐'} Auto-pause"
+
+    # --- Auto Update ---
+
+    def _start_auto_update_check(self):
+        """启动后台定时检查更新线程"""
+        def auto_check():
+            while True:
+                time.sleep(self._auto_update_hours * 3600)
+                self._silent_check_update()
+
+        t = threading.Thread(target=auto_check, daemon=True)
+        t.start()
+
+    def _silent_check_update(self):
+        """静默检查更新，有新版本时通知用户"""
+        try:
+            subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
+                           capture_output=True, timeout=15)
+            local = subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_DIR,
+                                   capture_output=True, text=True).stdout.strip()
+            remote = subprocess.run(["git", "rev-parse", "origin/main"], cwd=PROJECT_DIR,
+                                    capture_output=True, text=True).stdout.strip()
+            if local != remote:
+                log = subprocess.run(
+                    ["git", "log", f"{local}..{remote}", "--oneline"],
+                    cwd=PROJECT_DIR, capture_output=True, text=True,
+                ).stdout.strip()
+                rumps.notification("Sit Monitor", "有新版本可用",
+                                   f"{log}\n点击菜单 Check for Updates 升级")
+        except Exception:
+            pass
 
     # --- Update ---
 
