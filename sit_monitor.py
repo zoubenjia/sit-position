@@ -30,14 +30,14 @@ def parse_args():
     p = argparse.ArgumentParser(description="坐姿监控：检测不良坐姿并通知")
     p.add_argument("--camera", type=int, default=0, help="摄像头索引 (默认: 0)")
     p.add_argument("--interval", type=float, default=5.0, help="检测间隔/秒 (默认: 5.0)")
-    p.add_argument("--bad-seconds", type=int, default=60, help="连续坏姿势多少秒后通知 (默认: 60)")
+    p.add_argument("--bad-seconds", type=int, default=30, help="连续坏姿势多少秒后通知 (默认: 30)")
     p.add_argument("--cooldown", type=int, default=180, help="两次通知最小间隔/秒 (默认: 180)")
     p.add_argument("--debug", action="store_true", help="显示摄像头画面和骨架叠加")
     p.add_argument("--auto-pause", action="store_true", help="人离开时自动暂停视频，回来时恢复")
     p.add_argument("--away-seconds", type=float, default=3.0, help="离开多少秒后暂停 (默认: 3)")
-    p.add_argument("--shoulder-threshold", type=float, default=15.0, help="肩膀倾斜角阈值/度 (默认: 15)")
-    p.add_argument("--neck-threshold", type=float, default=25.0, help="头部前倾角阈值/度 (默认: 25)")
-    p.add_argument("--torso-threshold", type=float, default=10.0, help="躯干前倾角阈值/度 (默认: 10)")
+    p.add_argument("--shoulder-threshold", type=float, default=10.0, help="肩膀倾斜角阈值/度 (默认: 10)")
+    p.add_argument("--neck-threshold", type=float, default=15.0, help="头部前倾角阈值/度 (默认: 15)")
+    p.add_argument("--torso-threshold", type=float, default=8.0, help="躯干前倾角阈值/度 (默认: 8)")
     return p.parse_args()
 
 
