@@ -403,8 +403,9 @@ class TrayApp:
         menu = self._build_menu()
         self._icon = pystray.Icon("Sit Monitor", _load_icon("stopped"), "Sit Monitor", menu)
 
-        # 启动后自动开始监控 + 自动检查更新
+        # setup 在后台线程运行，必须先设 visible=True 让图标显示
         def on_setup(icon):
+            icon.visible = True
             self._start_monitor()
             self._start_auto_update_check()
 
