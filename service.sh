@@ -6,7 +6,12 @@ PYTHON="$PROJECT_DIR/.venv/bin/python"
 SCRIPT="$PROJECT_DIR/sit_monitor.py"
 LOG_DIR="$PROJECT_DIR/logs"
 SESSION="sit-monitor"
-SHELL_RC="$HOME/.bashrc"
+# 自动检测用户 shell 配置文件
+case "$(basename "$SHELL")" in
+    zsh)  SHELL_RC="$HOME/.zshrc" ;;
+    bash) SHELL_RC="$HOME/.bashrc" ;;
+    *)    SHELL_RC="$HOME/.profile" ;;
+esac
 MARKER="# sit-monitor auto-start"
 
 if ! command -v tmux &>/dev/null; then

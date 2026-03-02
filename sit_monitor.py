@@ -133,7 +133,12 @@ def send_notification(title, message):
 
 # --------------- 媒体播放控制 ---------------
 
-_BROWSERS = ["Firefox", "Google Chrome", "Safari", "Arc"]
+_BROWSERS = ["Firefox", "Google Chrome", "Safari", "Arc", "Brave Browser", "Microsoft Edge"]
+
+# Chrome 系浏览器支持 AppleScript 执行 JS（可控制任意 tab 的视频）
+_JS_BROWSERS = {"Google Chrome", "Arc", "Brave Browser", "Microsoft Edge"}
+
+_VIDEO_JS = "document.querySelectorAll('video').forEach(v => v.paused ? v.play() : v.pause())"
 
 
 def _detect_browser():
@@ -150,15 +155,39 @@ def _detect_browser():
 
 
 def media_play_pause(browser=None):
-    """激活浏览器并发送空格键来暂停/恢复视频"""
+    """暂停/恢复浏览器视频。Chrome 系用 JS 直控，其他用空格键。"""
     target = browser or _detect_browser()
     if not target:
         return
-    script = (
-        f'tell application "{target}" to activate\n'
-        'delay 0.3\n'
-        'tell application "System Events" to key code 49'
-    )
+
+    if target in _JS_BROWSERS:
+        # Chrome 系：遍历所有 tab 找到有视频的，直接 JS 控制（不受前台 tab 限制）
+        script = (
+            f'tell application "{target}"\n'
+            f'  repeat with w in windows\n'
+            f'    repeat with t in tabs of w\n'
+            f'      execute t javascript "{_VIDEO_JS}"\n'
+            f'    end repeat\n'
+            f'  end repeat\n'
+            f'end tell'
+        )
+    elif target == "Safari":
+        # Safari 用自己的 do JavaScript 语法
+        script = (
+            f'tell application "Safari"\n'
+            f'  repeat with d in documents\n'
+            f'    do JavaScript "{_VIDEO_JS}" in d\n'
+            f'  end repeat\n'
+            f'end tell'
+        )
+    else:
+        # Firefox 等不支持 JS 注入的浏览器：激活窗口 + 空格键
+        script = (
+            f'tell application "{target}" to activate\n'
+            'delay 0.3\n'
+            'tell application "System Events" to key code 49'
+        )
+
     subprocess.Popen(
         ["osascript", "-e", script],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
