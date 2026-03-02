@@ -90,6 +90,7 @@ class PostureMonitor:
         landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
 
         bad_start_time = None
+        good_streak = 0  # 连续 good 帧计数，用于防抖
         last_notify_time = 0
         last_check_time = 0
         away_start_time = None
@@ -212,7 +213,11 @@ class PostureMonitor:
                         self.stats.record("good", now)
                         log_event(self.logger, "good", **log_data)
 
+                    # 防抖：需要连续 3 帧 good 才算真正恢复
+                    GOOD_STREAK_REQUIRED = 3
+
                     if is_bad:
+                        good_streak = 0
                         if bad_start_time is None:
                             bad_start_time = now
                         bad_duration = now - bad_start_time
@@ -238,10 +243,12 @@ class PostureMonitor:
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
                     else:
-                        # bad→good 正向反馈
-                        if bad_start_time is not None and s.sound:
-                            speak("坐姿很好，继续保持")
-                        bad_start_time = None
+                        good_streak += 1
+                        if good_streak >= GOOD_STREAK_REQUIRED and bad_start_time is not None:
+                            # 真正恢复了，播报正向反馈（仅在坏姿势已触发过提醒后）
+                            if s.sound and (now - bad_start_time) >= s.bad_seconds:
+                                speak("坐姿很好，继续保持")
+                            bad_start_time = None
                         status_line = (
                             f"✓ 姿势良好 | 就坐 {sit_minutes:.0f}min | "
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())

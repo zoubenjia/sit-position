@@ -89,7 +89,7 @@ bash service.sh install   # 安装自启动
 bash service.sh start     # 启动
 bash service.sh stop      # 停止
 bash service.sh status    # 查看状态
-bash service.sh update    # 从 GitHub 更新
+bash service.sh update    # 从远程仓库更新
 bash service.sh log       # 查看日志
 ```
 
@@ -101,7 +101,7 @@ bash service.sh log       # 查看日志
 .\service.ps1 stop        # 停止
 .\service.ps1 restart     # 重启
 .\service.ps1 status      # 查看状态
-.\service.ps1 update      # 从 GitHub 更新
+.\service.ps1 update      # 从远程仓库更新
 .\service.ps1 log         # 查看日志
 .\service.ps1 uninstall   # 卸载自启动
 ```
