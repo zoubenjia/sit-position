@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "sit-monitor"
+version = "1.0.0"
+description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Benjia Zou" }]
+dependencies = [
+    "mediapipe",
+    "opencv-python",
+    "numpy",
+    "rumps",
+]
+
+[project.scripts]
+sit-monitor = "sit_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sit_monitor*"]
