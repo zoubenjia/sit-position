@@ -79,18 +79,20 @@ fi
 # --- 日志目录 ---
 mkdir -p "$SCRIPT_DIR/logs"
 
+# --- 安装开机自启并启动 ---
+echo ""
+echo "安装开机自启动并启动..."
+bash "$SCRIPT_DIR/service.sh" install
+
 # --- 完成 ---
 echo ""
 echo "=== 搭建完成 ==="
 echo ""
-echo "使用方式:"
-echo "  source $VENV_DIR/bin/activate"
-echo "  python sit_monitor.py --auto-pause     # CLI 后台模式"
-echo "  python sit_monitor.py --debug          # debug 模式（显示画面）"
-echo "  python sit_monitor.py --tray           # 系统托盘模式"
+echo "✅ 坐姿监控已在菜单栏启动（看到坐姿小人图标即成功）"
+echo "✅ 已设置开机自动启动"
 echo ""
-if command -v tmux &>/dev/null; then
-    echo "后台运行:"
-    echo "  bash service.sh start                  # 启动后台服务"
-    echo "  bash service.sh install                # 安装开机自启"
-fi
+echo "常用命令:"
+echo "  bash service.sh stop                   # 停止"
+echo "  bash service.sh restart                # 重启"
+echo "  bash service.sh update                 # 更新到最新版本"
+echo "  bash service.sh uninstall              # 卸载自启动"

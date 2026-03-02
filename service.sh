@@ -51,7 +51,13 @@ do_install() {
 
     echo "已安装 LaunchAgent: $PLIST_DST"
     echo "登录时会自动启动坐姿监控托盘"
-    echo "或运行 '$0 start' 立即启动"
+
+    # 安装后立即启动
+    if ! _tray_running; then
+        do_start
+    else
+        echo "托盘已在运行中"
+    fi
 }
 
 do_uninstall() {
@@ -149,12 +155,13 @@ do_update() {
         uv pip install --python "$PYTHON" -r requirements.txt
     fi
 
+    # 更新后重启/启动服务
     if _tray_running; then
         echo "重启服务..."
         do_stop
         sleep 1
-        do_start
     fi
+    do_start
 
     echo "更新完成: $(git log --oneline -1)"
 }
