@@ -5,9 +5,52 @@ import subprocess
 
 from sit_monitor.i18n import t
 
+# --------------- 通话检测 ---------------
+
+_CALL_APPS = [
+    "zoom", "zoom.us", "facetime", "microsoft teams", "teams",
+    "slack", "discord", "skype", "webex", "google meet",
+    "lark", "feishu", "wechat", "dingtalk",
+]
+
+
+def is_in_call():
+    """检测是否正在通话中（麦克风被通话类应用占用）。
+
+    通过 macOS 电源管理断言检查 audio-in（麦克风）断言，
+    再比对 PID 是否属于已知通话应用。
+    """
+    try:
+        result = subprocess.run(
+            ["pmset", "-g", "assertions"],
+            capture_output=True, text=True, timeout=3,
+        )
+        mic_pids = set()
+        for m in re.finditer(
+            r'Created for PID:\s*(\d+)\.\s*\n\s*Resources:.*audio-in',
+            result.stdout,
+        ):
+            mic_pids.add(m.group(1))
+
+        if not mic_pids:
+            return False
+
+        for pid in mic_pids:
+            ps_out = subprocess.run(
+                ["ps", "-p", pid, "-o", "comm="],
+                capture_output=True, text=True, timeout=2,
+            ).stdout.strip().lower()
+            if any(app in ps_out for app in _CALL_APPS):
+                return True
+
+        return False
+    except Exception:
+        return False  # 检测失败时不阻止 TTS
+
+
 # --------------- 通知 ---------------
 
-def send_notification(title, message, sound=False, use_notification_center=False):
+def send_notification(title, message, sound=False, use_notification_center=False, call_mute=False):
     """发送通知。返回 say 进程（如有），供调用方跟踪和终止。"""
     safe_title = title.replace('\\', '\\\\').replace('"', '\\"')
     safe_msg = message.replace('\\', '\\\\').replace('"', '\\"')
@@ -22,7 +65,7 @@ def send_notification(title, message, sound=False, use_notification_center=False
         )
     subprocess.Popen(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    if sound:
+    if sound and not (call_mute and is_in_call()):
         voice = t("platform.tts_voice")
         speech = message.replace("\n", "，" if voice == "Tingting" else ", ")
         return subprocess.Popen(["say", "-v", voice, speech], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

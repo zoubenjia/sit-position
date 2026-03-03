@@ -21,6 +21,7 @@ class Settings:
     sit_max_minutes: int = 45
     away_seconds: float = 3.0
     sound: bool = False
+    call_mute: bool = True
     auto_pause: bool = False
     camera: int = 0
     browser: str = ""

@@ -3,7 +3,12 @@
 import sys
 
 
-def send_notification(title, message, sound=False, use_notification_center=False):
+def is_in_call():
+    """Windows 平台通话检测（暂未实现）"""
+    return False
+
+
+def send_notification(title, message, sound=False, use_notification_center=False, call_mute=False):
     """发送 Windows Toast 通知。"""
     try:
         from winotify import Notification, audio

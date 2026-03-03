@@ -67,6 +67,7 @@ STRINGS: dict[str, str] = {
     "tray.menu.stats_alerts": "提醒次数: {count} 次",
     "tray.menu.settings_submenu": "设置",
     "tray.menu.sound": "语音播报",
+    "tray.menu.call_mute": "通话时静音",
     "tray.menu.auto_pause": "自动暂停视频",
     "tray.menu.fatigue_detection": "疲劳检测",
     "tray.menu.setting_shoulder": "肩膀倾斜",

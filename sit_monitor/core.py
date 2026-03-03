@@ -13,7 +13,7 @@ from sit_monitor.i18n import t
 from sit_monitor.posture import evaluate_posture
 from sit_monitor.stats import Stats
 from sit_monitor.debug import draw_debug
-from sit_monitor.platform import send_notification, media_play_pause
+from sit_monitor.platform import send_notification, media_play_pause, is_in_call
 from sit_monitor.tts import speak
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -270,6 +270,7 @@ class PostureMonitor:
                                 msg,
                                 sound=s.sound,
                                 use_notification_center=use_nc,
+                                call_mute=s.call_mute,
                             )
                             no_person_adjust_notified = True
                         elif not no_person_preview_notified and away_duration >= 30:
@@ -278,6 +279,7 @@ class PostureMonitor:
                                 t("core.no_person_preview_msg"),
                                 sound=s.sound,
                                 use_notification_center=use_nc,
+                                call_mute=s.call_mute,
                             )
                             no_person_preview_notified = True
 
@@ -324,6 +326,7 @@ class PostureMonitor:
                             t("core.sit_alert_msg", minutes=sit_minutes),
                             sound=s.sound,
                             use_notification_center=use_nc,
+                            call_mute=s.call_mute,
                         )
                         log_event(self.logger, "sit_alert", sit_minutes=round(sit_minutes, 1))
                         self.stats.sit_notifications_sent += 1
@@ -351,6 +354,7 @@ class PostureMonitor:
                                     fatigue_msg,
                                     sound=s.sound,
                                     use_notification_center=use_nc,
+                                    call_mute=s.call_mute,
                                 )
                                 log_event(self.logger, "fatigue_alert",
                                           level=fatigue_level,
@@ -391,6 +395,7 @@ class PostureMonitor:
                                 t("core.posture_alert_msg", msg=msg),
                                 sound=s.sound,
                                 use_notification_center=use_nc,
+                                call_mute=s.call_mute,
                             )
                             log_event(self.logger, "posture_alert", reasons=[r for r in reasons],
                                       sit_minutes=round(sit_minutes, 1))
@@ -407,7 +412,8 @@ class PostureMonitor:
                         if good_streak >= GOOD_STREAK_REQUIRED and bad_start_time is not None:
                             # 真正恢复了，播报正向反馈（仅在坏姿势已触发过提醒后）
                             if s.sound and (now - bad_start_time) >= s.bad_seconds:
-                                speak(t("core.good_posture_tts"))
+                                if not (s.call_mute and is_in_call()):
+                                    speak(t("core.good_posture_tts"))
                             bad_start_time = None
                         status_line = (
                             t("core.good_posture_status", minutes=sit_minutes)

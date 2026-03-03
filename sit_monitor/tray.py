@@ -151,11 +151,15 @@ class TrayApp(rumps.App):
             f"{'☑' if s.auto_pause else '☐'} {t('tray.menu.auto_pause')}",
             callback=self._toggle_auto_pause,
         )
+        self._mi_call_mute = rumps.MenuItem(
+            f"{'☑' if s.call_mute else '☐'} {t('tray.menu.call_mute')}",
+            callback=self._toggle_call_mute,
+        )
         self._mi_fatigue = rumps.MenuItem(
             f"{'☑' if s.fatigue_enabled else '☐'} {t('tray.menu.fatigue_detection')}",
             callback=self._toggle_fatigue,
         )
-        settings_items.extend([self._mi_sound, self._mi_auto_pause, None, self._mi_fatigue])
+        settings_items.extend([self._mi_sound, self._mi_call_mute, self._mi_auto_pause, None, self._mi_fatigue])
 
         # Social submenu
         self._mi_achievements = rumps.MenuItem(
@@ -508,6 +512,11 @@ class TrayApp(rumps.App):
         self.settings.auto_pause = not self.settings.auto_pause
         self.settings.save()
         sender.title = f"{'☑' if self.settings.auto_pause else '☐'} {t('tray.menu.auto_pause')}"
+
+    def _toggle_call_mute(self, sender):
+        self.settings.call_mute = not self.settings.call_mute
+        self.settings.save()
+        sender.title = f"{'☑' if self.settings.call_mute else '☐'} {t('tray.menu.call_mute')}"
 
     def _toggle_fatigue(self, sender):
         self.settings.fatigue_enabled = not self.settings.fatigue_enabled

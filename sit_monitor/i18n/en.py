@@ -67,6 +67,7 @@ STRINGS: dict[str, str] = {
     "tray.menu.stats_alerts": "Alerts: {count}",
     "tray.menu.settings_submenu": "Settings",
     "tray.menu.sound": "Sound",
+    "tray.menu.call_mute": "Mute during calls",
     "tray.menu.auto_pause": "Auto-pause",
     "tray.menu.fatigue_detection": "Fatigue Detection",
     "tray.menu.setting_shoulder": "Shoulder",
