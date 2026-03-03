@@ -65,6 +65,53 @@ class PostureMonitor:
             except Exception:
                 pass
 
+    @staticmethod
+    def _detect_direction_hint(results):
+        """根据部分可见的关键点分析人体偏移方向，返回方向提示文字或 None。
+
+        当 MediaPipe 检测到了部分身体（pose_landmarks 非空）但肩膀可见度不够时，
+        通过 NOSE 等高可见度关键点在画面中的归一化坐标判断偏移方向。
+        """
+        if not results.pose_landmarks:
+            return None  # 完全没检测到，无法判断方向
+
+        lm = results.pose_landmarks[0]
+        # 选择可见度最高的关键点作为参考
+        NOSE = mp.tasks.vision.PoseLandmark.NOSE
+        LEFT_SHOULDER = mp.tasks.vision.PoseLandmark.LEFT_SHOULDER
+        RIGHT_SHOULDER = mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER
+
+        ref = None
+        best_vis = 0.3  # 最低可见度门槛
+        for idx in [NOSE, LEFT_SHOULDER, RIGHT_SHOULDER]:
+            pt = lm[idx]
+            if pt.visibility > best_vis:
+                best_vis = pt.visibility
+                ref = pt
+
+        if ref is None:
+            return None
+
+        hints = []
+        # x: 0=画面左边, 1=画面右边  (镜像：画面左边对应人的右边)
+        if ref.x < 0.2:
+            hints.append(t("core.direction.right"))   # 人在画面左侧→请往右移
+        elif ref.x > 0.8:
+            hints.append(t("core.direction.left"))    # 人在画面右侧→请往左移
+
+        # y: 0=画面上方, 1=画面下方
+        if ref.y < 0.15:
+            hints.append(t("core.direction.down"))    # 人在画面顶部→摄像头往下调
+        elif ref.y > 0.85:
+            hints.append(t("core.direction.up"))      # 人在画面底部→摄像头往上调
+
+        if not hints:
+            # 人在画面中央附近但肩膀可见度低→可能距离太远或角度不对
+            hints.append(t("core.direction.closer"))
+
+        sep = t("core.direction.sep")
+        return sep.join(hints)
+
     def check_model(self):
         if not os.path.exists(MODEL_PATH):
             return False
@@ -118,6 +165,8 @@ class PostureMonitor:
         _say_proc = None  # 跟踪当前 say 进程，用于离开时停止语音
         last_check_time = 0
         away_start_time = None
+        no_person_adjust_notified = False   # 已发送"调整摄像头"提示
+        no_person_preview_notified = False  # 已发送"打开显示摄像头"提示
         media_paused = False
         last_media_toggle_time = 0  # 媒体切换冷却
         sit_start_time = None
@@ -197,13 +246,42 @@ class PostureMonitor:
                     present_streak = 0
                     self.stats.record("away", now)
 
-                    if away_start_time is not None and (now - away_start_time) >= 60:
+                    if away_start_time is None:
+                        away_start_time = now
+
+                    if (now - away_start_time) >= 60:
                         sit_start_time = None
 
+                    away_duration = now - away_start_time
+
+                    # --- 分析人体偏移方向 ---
+                    direction_hint = self._detect_direction_hint(results)
+
+                    # --- 未检测到人时的摄像头调整提示 ---
+                    snoozed = now < self.snooze_until
+                    if not snoozed:
+                        if not no_person_adjust_notified and away_duration >= 10:
+                            if direction_hint:
+                                msg = t("core.no_person_direction_msg", direction=direction_hint)
+                            else:
+                                msg = t("core.no_person_adjust_msg")
+                            send_notification(
+                                t("core.no_person_adjust_title"),
+                                msg,
+                                sound=s.sound,
+                                use_notification_center=use_nc,
+                            )
+                            no_person_adjust_notified = True
+                        elif not no_person_preview_notified and away_duration >= 30:
+                            send_notification(
+                                t("core.no_person_preview_title"),
+                                t("core.no_person_preview_msg"),
+                                sound=s.sound,
+                                use_notification_center=use_nc,
+                            )
+                            no_person_preview_notified = True
+
                     if s.auto_pause:
-                        if away_start_time is None:
-                            away_start_time = now
-                        away_duration = now - away_start_time
                         if (not media_paused
                                 and away_duration >= s.away_seconds
                                 and (now - last_media_toggle_time) >= MEDIA_TOGGLE_COOLDOWN):
@@ -215,9 +293,7 @@ class PostureMonitor:
                         else:
                             status_line = t("core.no_person_away", seconds=away_duration)
                     else:
-                        if away_start_time is None:
-                            away_start_time = now
-                        status_line = t("core.no_person")
+                        status_line = t("core.no_person_away", seconds=away_duration)
 
                     self._notify_state("away")
                 else:
@@ -233,6 +309,8 @@ class PostureMonitor:
                         last_notify_time = 0
                         bad_start_time = None
                     away_start_time = None
+                    no_person_adjust_notified = False
+                    no_person_preview_notified = False
 
                     if sit_start_time is None:
                         sit_start_time = now
