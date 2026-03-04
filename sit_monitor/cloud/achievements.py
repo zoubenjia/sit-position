@@ -12,8 +12,9 @@ from sit_monitor.report import _read_events, daily_summary
 
 log = logging.getLogger(__name__)
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ACHIEVEMENTS_STATE_PATH = os.path.join(SCRIPT_DIR, "logs", "achievements.json")
+from sit_monitor.paths import achievements_state_path
+
+ACHIEVEMENTS_STATE_PATH = achievements_state_path()
 
 # 7 个预定义成就
 ACHIEVEMENTS = [

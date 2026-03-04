@@ -15,9 +15,10 @@ import mediapipe as mp
 from sit_monitor.exercise.voice_coach import VoiceCoach
 from sit_monitor.i18n import t
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
-LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+from sit_monitor.paths import model_path, log_dir
+
+MODEL_PATH = model_path()
+LOG_DIR = log_dir()
 
 
 class RepPhase(Enum):

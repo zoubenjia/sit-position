@@ -20,10 +20,12 @@ log = logging.getLogger(__name__)
 
 VERSION = "1.1.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
+
+PROJECT_DIR = project_dir()
 
 # 图标路径
-_ASSETS = os.path.join(os.path.dirname(__file__), "assets")
+_ASSETS = assets_dir()
 _ICON_FILES = {
     "good": os.path.join(_ASSETS, "icon_good_color.png"),
     "bad": os.path.join(_ASSETS, "icon_bad_color.png"),
@@ -393,7 +395,7 @@ class TrayApp(rumps.App):
 
     def _start_exercise(self, exercise_id, sender, resume_posture_after=False):
         # 以独立子进程启动（cv2.imshow 需要主线程）
-        python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+        python = python_executable()
         args = [python, "-m", "sit_monitor", exercise_id,
                 "--camera", str(self.settings.camera), "--debug"]
         self._exercise_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
@@ -433,7 +435,7 @@ class TrayApp(rumps.App):
             self._start_preview(sender)
 
     def _start_preview(self, sender):
-        python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+        python = python_executable()
         args = [python, "-m", "sit_monitor", "preview",
                 "--camera", str(self.settings.camera)]
         self._preview_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
@@ -850,6 +852,8 @@ class TrayApp(rumps.App):
 
     def _silent_check_update(self):
         """静默检查更新，有新版本时通知用户"""
+        if is_bundled():
+            return
         try:
             subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
                            capture_output=True, timeout=15)
@@ -870,6 +874,10 @@ class TrayApp(rumps.App):
     # --- Update ---
 
     def _check_update(self, _):
+        if is_bundled():
+            rumps.notification("Sit Monitor", t("tray.menu.check_updates"),
+                               "App 版本请从 GitHub Releases 下载更新")
+            return
         def do_update():
             try:
                 subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
@@ -891,7 +899,7 @@ class TrayApp(rumps.App):
                     cwd=PROJECT_DIR, capture_output=True, text=True,
                 ).stdout
                 if "requirements.txt" in diff:
-                    python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+                    python = python_executable()
                     req = os.path.join(PROJECT_DIR, "requirements.txt")
                     subprocess.run(["uv", "pip", "install", "--python", python, "-r", req],
                                    capture_output=True, timeout=60)
@@ -907,7 +915,7 @@ class TrayApp(rumps.App):
                 # 自动重启：停止监控后 re-exec
                 self._stop_monitor()
                 time.sleep(1)
-                python = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
+                python = python_executable()
                 script = os.path.join(PROJECT_DIR, "sit_monitor.py")
                 args = [python, script, "--tray"]
                 if self.debug:

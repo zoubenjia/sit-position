@@ -16,10 +16,11 @@ from sit_monitor.debug import draw_debug
 from sit_monitor.platform import send_notification, media_play_pause, is_in_call
 from sit_monitor.tts import speak
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "pose_landmarker_lite.task")
-FACE_MODEL_PATH = os.path.join(SCRIPT_DIR, "face_landmarker.task")
-LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+from sit_monitor.paths import model_path, face_model_path, log_dir
+
+MODEL_PATH = model_path()
+FACE_MODEL_PATH = face_model_path()
+LOG_DIR = log_dir()
 
 
 def setup_logging():

@@ -14,8 +14,9 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SYNC_STATE_PATH = os.path.join(SCRIPT_DIR, "logs", "sync_state.json")
+from sit_monitor.paths import sync_state_path
+
+SYNC_STATE_PATH = sync_state_path()
 SYNC_INTERVAL = 300  # 5 分钟
 
 

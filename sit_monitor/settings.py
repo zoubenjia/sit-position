@@ -5,8 +5,9 @@ import os
 import uuid
 from dataclasses import asdict, dataclass, field
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SETTINGS_PATH = os.path.join(SCRIPT_DIR, "settings.json")
+from sit_monitor.paths import settings_path
+
+SETTINGS_PATH = settings_path()
 
 
 @dataclass

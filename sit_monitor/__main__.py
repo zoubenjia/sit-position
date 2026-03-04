@@ -120,8 +120,8 @@ def _run_preview(args):
     from sit_monitor.settings import Settings
 
     settings = Settings.load()
-    model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                              "pose_landmarker_lite.task")
+    from sit_monitor.paths import model_path as _model_path
+    model_path = _model_path()
 
     base_options = mp_lib.tasks.BaseOptions(model_asset_path=model_path)
     options = mp_lib.tasks.vision.PoseLandmarkerOptions(
@@ -173,7 +173,10 @@ def _run_preview(args):
 
 
 def main():
+    from sit_monitor.paths import is_bundled
     args = parse_args()
+    if is_bundled():
+        args.tray = True
 
     if args.mode == "posture":
         _run_posture(args)

@@ -24,7 +24,9 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 # 从本地配置文件读取（不提交到 git）
-_CLOUD_CONFIG = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "cloud_config.json")
+from sit_monitor.paths import cloud_config_path
+
+_CLOUD_CONFIG = cloud_config_path()
 
 def _load_cloud_config():
     global SUPABASE_URL, SUPABASE_ANON_KEY

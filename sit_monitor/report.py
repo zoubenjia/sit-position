@@ -7,8 +7,9 @@ from datetime import datetime, timedelta
 
 from sit_monitor.i18n import t
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
+from sit_monitor.paths import log_dir
+
+LOG_DIR = log_dir()
 LOG_FILE = os.path.join(LOG_DIR, "posture.jsonl")
 
 
