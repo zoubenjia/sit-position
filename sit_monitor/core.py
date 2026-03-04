@@ -240,7 +240,19 @@ class PostureMonitor:
 
                 if not person_present:
                     # 区分：有部分身体检测到（摄像头角度问题） vs 完全没人
-                    partial_detected = bool(results.pose_landmarks)
+                    # 仅看 pose_landmarks 非空不够——人走后 MediaPipe 可能在背景上
+                    # 产生低置信度的误检测，需要检查关键点的实际可见度
+                    partial_detected = False
+                    if results.pose_landmarks:
+                        _lm = results.pose_landmarks[0]
+                        _key_vis = max(
+                            _lm[mp.tasks.vision.PoseLandmark.NOSE].visibility,
+                            _lm[mp.tasks.vision.PoseLandmark.LEFT_SHOULDER].visibility,
+                            _lm[mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER].visibility,
+                            _lm[mp.tasks.vision.PoseLandmark.LEFT_HIP].visibility,
+                            _lm[mp.tasks.vision.PoseLandmark.RIGHT_HIP].visibility,
+                        )
+                        partial_detected = _key_vis >= 0.3
 
                     # 停止正在播放的提醒语音
                     if _say_proc and _say_proc.poll() is None:
@@ -253,7 +265,7 @@ class PostureMonitor:
                     if away_start_time is None:
                         away_start_time = now
 
-                    if not partial_detected and (now - away_start_time) >= 60:
+                    if (now - away_start_time) >= 60:
                         sit_start_time = None
 
                     away_duration = now - away_start_time
@@ -271,9 +283,9 @@ class PostureMonitor:
                             send_notification(
                                 t("core.camera_adjust_title"),
                                 msg,
-                                sound=s.sound,
+                                sound=False,
                                 use_notification_center=use_nc,
-                                call_mute=s.call_mute,
+                                call_mute=False,
                             )
                             no_person_adjust_notified = True
 
@@ -281,13 +293,14 @@ class PostureMonitor:
                         self._notify_state("camera_adjust", direction=direction_hint)
                     else:
                         # 真正没人：完全没有检测到任何身体
+                        # 人走了不播语音——说了也听不到
                         if not snoozed and not no_person_preview_notified and away_duration >= 30:
                             send_notification(
                                 t("core.no_person_preview_title"),
                                 t("core.no_person_preview_msg"),
-                                sound=s.sound,
+                                sound=False,
                                 use_notification_center=use_nc,
-                                call_mute=s.call_mute,
+                                call_mute=False,
                             )
                             no_person_preview_notified = True
 
