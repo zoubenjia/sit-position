@@ -239,7 +239,10 @@ class PostureMonitor:
                 PRESENT_STREAK_REQUIRED = 2  # 回来后连续检测到 2 次才恢复播放
 
                 if not person_present:
-                    # 人走开了，停止正在播放的提醒语音
+                    # 区分：有部分身体检测到（摄像头角度问题） vs 完全没人
+                    partial_detected = bool(results.pose_landmarks)
+
+                    # 停止正在播放的提醒语音
                     if _say_proc and _say_proc.poll() is None:
                         _say_proc.terminate()
                         _say_proc = None
@@ -250,31 +253,35 @@ class PostureMonitor:
                     if away_start_time is None:
                         away_start_time = now
 
-                    if (now - away_start_time) >= 60:
+                    if not partial_detected and (now - away_start_time) >= 60:
                         sit_start_time = None
 
                     away_duration = now - away_start_time
 
-                    # --- 分析人体偏移方向 ---
-                    direction_hint = self._detect_direction_hint(results)
-
-                    # --- 未检测到人时的摄像头调整提示 ---
                     snoozed = now < self.snooze_until
-                    if not snoozed:
-                        if not no_person_adjust_notified and away_duration >= 10:
+                    if partial_detected:
+                        # 摄像头角度不对：能看到部分身体但肩膀不够清晰
+                        direction_hint = self._detect_direction_hint(results)
+
+                        if not snoozed and not no_person_adjust_notified and away_duration >= 5:
                             if direction_hint:
-                                msg = t("core.no_person_direction_msg", direction=direction_hint)
+                                msg = t("core.camera_adjust_direction_msg", direction=direction_hint)
                             else:
-                                msg = t("core.no_person_adjust_msg")
+                                msg = t("core.camera_adjust_msg")
                             send_notification(
-                                t("core.no_person_adjust_title"),
+                                t("core.camera_adjust_title"),
                                 msg,
                                 sound=s.sound,
                                 use_notification_center=use_nc,
                                 call_mute=s.call_mute,
                             )
                             no_person_adjust_notified = True
-                        elif not no_person_preview_notified and away_duration >= 30:
+
+                        status_line = t("core.camera_adjust_status", seconds=away_duration)
+                        self._notify_state("camera_adjust", direction=direction_hint)
+                    else:
+                        # 真正没人：完全没有检测到任何身体
+                        if not snoozed and not no_person_preview_notified and away_duration >= 30:
                             send_notification(
                                 t("core.no_person_preview_title"),
                                 t("core.no_person_preview_msg"),
@@ -284,21 +291,21 @@ class PostureMonitor:
                             )
                             no_person_preview_notified = True
 
-                    if s.auto_pause:
-                        if (not media_paused
-                                and away_duration >= s.away_seconds
-                                and (now - last_media_toggle_time) >= MEDIA_TOGGLE_COOLDOWN):
-                            last_media_toggle_time = now  # 不管成败都更新，避免反复重试
-                            if media_play_pause(s.browser or None):
-                                media_paused = True
-                        if media_paused:
-                            status_line = t("core.media_paused", seconds=away_duration)
+                        if s.auto_pause:
+                            if (not media_paused
+                                    and away_duration >= s.away_seconds
+                                    and (now - last_media_toggle_time) >= MEDIA_TOGGLE_COOLDOWN):
+                                last_media_toggle_time = now
+                                if media_play_pause(s.browser or None):
+                                    media_paused = True
+                            if media_paused:
+                                status_line = t("core.media_paused", seconds=away_duration)
+                            else:
+                                status_line = t("core.no_person_away", seconds=away_duration)
                         else:
                             status_line = t("core.no_person_away", seconds=away_duration)
-                    else:
-                        status_line = t("core.no_person_away", seconds=away_duration)
 
-                    self._notify_state("away")
+                        self._notify_state("away")
                 else:
                     present_streak += 1
                     if (s.auto_pause and media_paused

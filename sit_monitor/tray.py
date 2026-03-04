@@ -30,6 +30,7 @@ _ICON_FILES = {
     "good": os.path.join(_ASSETS, "icon_good_color.png"),
     "bad": os.path.join(_ASSETS, "icon_bad_color.png"),
     "away": os.path.join(_ASSETS, "icon_idle.png"),
+    "camera_adjust": os.path.join(_ASSETS, "icon_bad_color.png"),
     "camera_wait": os.path.join(_ASSETS, "icon_idle.png"),
     "stopped": os.path.join(_ASSETS, "icon_idle.png"),
 }
@@ -316,6 +317,12 @@ class TrayApp(rumps.App):
                 self._mi_hint.title = t("tray.hint.bad_default") + fatigue_suffix
         elif state == "away":
             self._mi_hint.title = t("tray.hint.away")
+        elif state == "camera_adjust":
+            direction = details.get("direction")
+            if direction:
+                self._mi_hint.title = t("tray.hint.camera_adjust_direction", direction=direction)
+            else:
+                self._mi_hint.title = t("tray.hint.camera_adjust")
         elif state == "camera_wait":
             self._mi_hint.title = t("tray.hint.camera_wait")
         elif state == "stopped":
