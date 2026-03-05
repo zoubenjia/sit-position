@@ -4,7 +4,9 @@ from unittest.mock import MagicMock
 
 from sit_monitor.posture import (
     LEFT_EAR, RIGHT_EAR, LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP,
+    LEFT_KNEE, RIGHT_KNEE,
     angle_deg,
+    detect_stance,
     evaluate_posture,
     head_forward_angle,
     shoulder_tilt,
@@ -132,3 +134,23 @@ class TestEvaluatePosture:
         thresholds = {"shoulder": 99, "neck": 99, "torso": 99}
         _, details, _ = evaluate_posture(landmarks, thresholds)
         assert set(details.keys()) == {"shoulder", "neck", "torso", "head_tilt"}
+
+
+class TestDetectStance:
+    def test_sitting_no_knees(self):
+        landmarks = _make_landmarks()
+        # 默认 knees 可见度低 (0.1)，应判定为坐姿
+        assert detect_stance(landmarks) == "sitting"
+
+    def test_standing_with_knees(self):
+        landmarks = _make_landmarks({
+            LEFT_KNEE: (0.40, 0.80),
+            RIGHT_KNEE: (0.60, 0.80),
+        })
+        assert detect_stance(landmarks) == "standing"
+
+    def test_standing_one_knee_visible(self):
+        landmarks = _make_landmarks({
+            LEFT_KNEE: (0.40, 0.80),
+        })
+        assert detect_stance(landmarks) == "standing"

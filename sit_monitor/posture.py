@@ -15,6 +15,8 @@ LEFT_SHOULDER = PoseLandmark.LEFT_SHOULDER
 RIGHT_SHOULDER = PoseLandmark.RIGHT_SHOULDER
 LEFT_HIP = PoseLandmark.LEFT_HIP
 RIGHT_HIP = PoseLandmark.RIGHT_HIP
+LEFT_KNEE = PoseLandmark.LEFT_KNEE
+RIGHT_KNEE = PoseLandmark.RIGHT_KNEE
 
 
 def angle_deg(dx, dy):
@@ -85,6 +87,24 @@ def torso_forward_angle(landmarks):
         angles.append(angle_deg(rs.x - rh.x, rs.y - rh.y))
 
     return float(np.mean(angles)) if angles else None
+
+
+def detect_stance(landmarks, mode="auto"):
+    """判断站立/坐姿。
+
+    mode: "auto" 自动检测, "sitting" 强制坐姿, "standing" 强制站立
+    自动模式通过膝盖可见度判断：膝盖可见→站立，否则→坐姿。
+    """
+    if mode == "standing":
+        return "standing"
+    if mode == "sitting":
+        return "sitting"
+    # auto: 膝盖可见则为站立
+    lk = landmarks[LEFT_KNEE]
+    rk = landmarks[RIGHT_KNEE]
+    if lk.visibility >= 0.5 or rk.visibility >= 0.5:
+        return "standing"
+    return "sitting"
 
 
 def evaluate_posture(landmarks, thresholds):

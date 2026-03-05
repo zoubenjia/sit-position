@@ -16,12 +16,16 @@ STRINGS: dict[str, str] = {
     "core.camera_connected": "\ud83d\udcf7 Camera connected, monitoring started...",
     "core.sit_alert_title": "Sitting Reminder",
     "core.sit_alert_msg": "You've been sitting for {minutes:.0f} minutes. Get up and stretch!",
+    "core.stand_alert_title": "Standing Reminder",
+    "core.stand_alert_msg": "You've been standing for {minutes:.0f} minutes. Take a seat and rest!",
     "core.fatigue_very_tired": "You look very tired. Please take a break now!",
     "core.fatigue_tired": "Fatigue detected (frequent blinking/yawning). Take a rest.",
     "core.fatigue_alert_title": "Fatigue Alert",
     "core.posture_alert_title": "Posture Alert",
+    "core.posture_alert_title_standing": "Standing Posture Alert",
     "core.posture_alert_msg": "Please correct your posture: {msg}",
     "core.sit_reminder_suffix": "\n(Sitting for {minutes:.0f} min. Time to get up and move!)",
+    "core.stand_reminder_suffix": "\n(Standing for {minutes:.0f} min. Time to sit down and rest!)",
     "core.media_paused": "\u23f8 Media paused (away {seconds:.0f}s)",
     "core.no_person_away": "No person detected ({seconds:.0f}s)",
     "core.no_person": "No person detected",
@@ -38,8 +42,10 @@ STRINGS: dict[str, str] = {
     "core.direction.closer": "move closer to the camera or adjust its angle",
     "core.direction.sep": " and ",
     "core.bad_posture_status": "\u26a0 Bad posture {duration:.0f}s | Sitting {minutes:.0f}min | ",
+    "core.bad_posture_status_standing": "\u26a0 Bad posture {duration:.0f}s | Standing {minutes:.0f}min | ",
     "core.good_posture_tts": "Good posture, keep it up",
     "core.good_posture_status": "\u2713 Good posture | Sitting {minutes:.0f}min | ",
+    "core.good_posture_status_standing": "\u2713 Good posture | Standing {minutes:.0f}min | ",
     "core.session_summary_title": "\ud83d\udcca Posture Monitoring Summary",
     "core.exited": "Exited.",
 
@@ -90,6 +96,9 @@ STRINGS: dict[str, str] = {
     "tray.menu.unlink": "\ud83d\udd13 Unlink",
     "tray.menu.check_updates": "Check for Updates",
     "tray.menu.statistics_summary": "Good {good}min | Bad {bad}min | Alerts {notif}",
+    "tray.menu.stance_auto": "\ud83e\ude91 Mode: Auto",
+    "tray.menu.stance_sitting": "\ud83e\ude91 Mode: Sitting",
+    "tray.menu.stance_standing": "\ud83e\uddcd Mode: Standing",
     "tray.menu.language_switch": "\ud83c\udf10 \u4e2d\u6587",
 
     # ===== tray - mode switch =====
@@ -99,6 +108,7 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - posture hint =====
     "tray.hint.good": "\u2713 Good Posture",
+    "tray.hint.good_standing": "\u2713 Good Standing Posture",
     "tray.hint.bad_default": "\u26a0 Please correct posture",
     "tray.hint.away": "\u2014 Away",
     "tray.hint.camera_adjust": "\U0001f4f7 Camera angle off, please adjust",

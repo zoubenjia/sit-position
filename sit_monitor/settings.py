@@ -40,6 +40,8 @@ class Settings:
     supabase_refresh_token: str = ""
     # Auth
     auth_provider: str = "device"  # device, google
+    # Stance
+    stance_mode: str = "auto"  # auto=自动检测, sitting=坐姿, standing=站姿
     # UI
     simple_mode: bool = True  # True=精简菜单, False=完整菜单
     language: str = "zh"  # zh=中文, en=English

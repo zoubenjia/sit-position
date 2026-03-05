@@ -10,7 +10,7 @@ import cv2
 import mediapipe as mp
 
 from sit_monitor.i18n import t
-from sit_monitor.posture import evaluate_posture
+from sit_monitor.posture import detect_stance, evaluate_posture
 from sit_monitor.stats import Stats
 from sit_monitor.debug import draw_debug
 from sit_monitor.platform import send_notification, media_play_pause, is_in_call
@@ -174,6 +174,7 @@ class PostureMonitor:
         last_media_toggle_time = 0  # 媒体切换冷却
         sit_start_time = None
         last_sit_notify_time = 0
+        current_stance = "sitting"  # sitting 或 standing
         cap = None
         camera_retry_interval = 5
 
@@ -350,12 +351,21 @@ class PostureMonitor:
                         sit_start_time = now
                     sit_minutes = (now - sit_start_time) / 60
 
+                    lm = results.pose_landmarks[0]
+                    current_stance = detect_stance(lm, s.stance_mode)
+
                     sit_max_seconds = s.sit_max_minutes * 60
                     snoozed = now < self.snooze_until
                     if not snoozed and (now - sit_start_time) >= sit_max_seconds and (now - last_sit_notify_time) >= sit_max_seconds:
+                        if current_stance == "standing":
+                            alert_title = t("core.stand_alert_title")
+                            alert_msg = t("core.stand_alert_msg", minutes=sit_minutes)
+                        else:
+                            alert_title = t("core.sit_alert_title")
+                            alert_msg = t("core.sit_alert_msg", minutes=sit_minutes)
                         _say_proc = send_notification(
-                            t("core.sit_alert_title"),
-                            t("core.sit_alert_msg", minutes=sit_minutes),
+                            alert_title,
+                            alert_msg,
                             sound=s.sound,
                             use_notification_center=use_nc,
                             call_mute=s.call_mute,
@@ -364,7 +374,6 @@ class PostureMonitor:
                         self.stats.sit_notifications_sent += 1
                         last_sit_notify_time = now
 
-                    lm = results.pose_landmarks[0]
                     is_bad, details, reasons = evaluate_posture(lm, thresholds)
 
                     # --- 疲劳检测 ---
@@ -400,6 +409,7 @@ class PostureMonitor:
 
                     log_data = {k: round(v, 1) if v is not None else None for k, v in details.items()}
                     log_data["sit_minutes"] = round(sit_minutes, 1)
+                    log_data["stance"] = current_stance
                     if fatigue_level != "normal":
                         log_data["fatigue"] = fatigue_level
                     if is_bad:
@@ -421,9 +431,11 @@ class PostureMonitor:
                         if not snoozed and bad_duration >= s.bad_seconds and (now - last_notify_time) >= s.cooldown:
                             msg = "、".join(reasons)
                             if sit_minutes >= s.sit_max_minutes:
-                                msg += t("core.sit_reminder_suffix", minutes=sit_minutes)
+                                suffix_key = "core.stand_reminder_suffix" if current_stance == "standing" else "core.sit_reminder_suffix"
+                                msg += t(suffix_key, minutes=sit_minutes)
+                            posture_title_key = "core.posture_alert_title_standing" if current_stance == "standing" else "core.posture_alert_title"
                             _say_proc = send_notification(
-                                t("core.posture_alert_title"),
+                                t(posture_title_key),
                                 t("core.posture_alert_msg", msg=msg),
                                 sound=s.sound,
                                 use_notification_center=use_nc,
@@ -435,8 +447,9 @@ class PostureMonitor:
                             last_notify_time = now
                             bad_start_time = now
 
+                        bad_status_key = "core.bad_posture_status_standing" if current_stance == "standing" else "core.bad_posture_status"
                         status_line = (
-                            t("core.bad_posture_status", duration=bad_duration, minutes=sit_minutes)
+                            t(bad_status_key, duration=bad_duration, minutes=sit_minutes)
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
                     else:
@@ -447,8 +460,9 @@ class PostureMonitor:
                                 if not (s.call_mute and is_in_call()):
                                     speak(t("core.good_posture_tts"))
                             bad_start_time = None
+                        good_status_key = "core.good_posture_status_standing" if current_stance == "standing" else "core.good_posture_status"
                         status_line = (
-                            t("core.good_posture_status", minutes=sit_minutes)
+                            t(good_status_key, minutes=sit_minutes)
                             + " | ".join(f"{k}:{v:.1f}°" if v else f"{k}:N/A" for k, v in details.items())
                         )
 
@@ -463,7 +477,8 @@ class PostureMonitor:
                             "yawn_count": fatigue_tracker.yawn_count,
                         }
                     self._notify_state(state, details=details, reasons=reasons,
-                                       sit_minutes=sit_minutes, fatigue=fatigue_info)
+                                       sit_minutes=sit_minutes, fatigue=fatigue_info,
+                                       stance=current_stance)
 
                     if self.debug:
                         draw_debug(frame, lm, is_bad, details)

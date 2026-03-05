@@ -16,12 +16,16 @@ STRINGS: dict[str, str] = {
     "core.camera_connected": "📷 摄像头已连接，开始监控...",
     "core.sit_alert_title": "久坐提醒",
     "core.sit_alert_msg": "你已经连续坐了 {minutes:.0f} 分钟，起来活动一下、喝杯水吧！",
+    "core.stand_alert_title": "久站提醒",
+    "core.stand_alert_msg": "你已经连续站了 {minutes:.0f} 分钟，坐下休息一会儿吧！",
     "core.fatigue_very_tired": "你看起来非常疲劳，建议立即休息！",
     "core.fatigue_tired": "检测到疲劳迹象（眨眼频率高/打哈欠），注意休息",
     "core.fatigue_alert_title": "疲劳提醒",
     "core.posture_alert_title": "坐姿提醒",
+    "core.posture_alert_title_standing": "站姿提醒",
     "core.posture_alert_msg": "请纠正姿势：{msg}",
     "core.sit_reminder_suffix": "\n（已连续就坐 {minutes:.0f} 分钟，建议起来活动、喝杯水）",
+    "core.stand_reminder_suffix": "\n（已连续站立 {minutes:.0f} 分钟，建议坐下休息一会儿）",
     "core.media_paused": "⏸ 已暂停播放（离开 {seconds:.0f}s）",
     "core.no_person_away": "未检测到人体 ({seconds:.0f}s)",
     "core.no_person": "未检测到人体",
@@ -38,8 +42,10 @@ STRINGS: dict[str, str] = {
     "core.direction.closer": "靠近摄像头一些，或调整摄像头角度",
     "core.direction.sep": "，并",
     "core.bad_posture_status": "⚠ 坏姿势 {duration:.0f}s | 就坐 {minutes:.0f}min | ",
+    "core.bad_posture_status_standing": "⚠ 坏姿势 {duration:.0f}s | 站立 {minutes:.0f}min | ",
     "core.good_posture_tts": "坐姿很好，继续保持",
     "core.good_posture_status": "✓ 姿势良好 | 就坐 {minutes:.0f}min | ",
+    "core.good_posture_status_standing": "✓ 姿势良好 | 站立 {minutes:.0f}min | ",
     "core.session_summary_title": "📊 本次坐姿监控统计",
     "core.exited": "已退出。",
 
@@ -90,6 +96,9 @@ STRINGS: dict[str, str] = {
     "tray.menu.unlink": "🔓 解绑",
     "tray.menu.check_updates": "检查更新",
     "tray.menu.statistics_summary": "良好 {good}分钟 | 不良 {bad}分钟 | 提醒 {notif}次",
+    "tray.menu.stance_auto": "🪑 模式: 自动检测",
+    "tray.menu.stance_sitting": "🪑 模式: 坐姿",
+    "tray.menu.stance_standing": "🧍 模式: 站姿",
     "tray.menu.language_switch": "🌐 English",
 
     # ===== tray - mode switch =====
@@ -99,7 +108,8 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - posture hint =====
     "tray.hint.good": "✓ 姿势良好",
-    "tray.hint.bad_default": "⚠ 请纠正坐姿",
+    "tray.hint.good_standing": "✓ 站姿良好",
+    "tray.hint.bad_default": "⚠ 请纠正姿势",
     "tray.hint.away": "— 人不在",
     "tray.hint.camera_adjust": "📷 摄像头角度不对，请调整",
     "tray.hint.camera_adjust_direction": "📷 请{direction}",

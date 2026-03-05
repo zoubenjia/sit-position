@@ -80,11 +80,17 @@ class TrayApp(rumps.App):
             self.menu = self._menu_advanced(s)
         self._update_stats_menu()
 
+    def _stance_label(self):
+        """当前 stance_mode 的显示文字"""
+        mode = self.settings.stance_mode
+        return t(f"tray.menu.stance_{mode}")
+
     def _menu_simple(self, s):
         """精简模式：只保留核心功能，新用户友好"""
         self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
+        self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
         self._mi_cloud = rumps.MenuItem(
             f"{'☑' if s.cloud_enabled else '☐'} {t('tray.menu.enable_cloud')}",
@@ -95,6 +101,7 @@ class TrayApp(rumps.App):
             None,
             self._mi_start,
             self._mi_pushup,
+            self._mi_stance,
             rumps.MenuItem(t("tray.menu.quick_battle"), callback=self._quick_battle),
             None,
             self._mi_stats,
@@ -113,6 +120,7 @@ class TrayApp(rumps.App):
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_preview = rumps.MenuItem(t("tray.menu.show_camera"), callback=self._toggle_preview)
         self._mi_snooze = rumps.MenuItem(t("tray.menu.pause_alerts"), callback=self._snooze)
+        self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
         self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
 
@@ -193,6 +201,7 @@ class TrayApp(rumps.App):
             self._mi_start,
             self._mi_preview,
             self._mi_snooze,
+            self._mi_stance,
             None,
             self._mi_pushup,
             [rumps.MenuItem(t("tray.menu.battle_submenu")), [
@@ -306,8 +315,11 @@ class TrayApp(rumps.App):
             elif fl == "tired":
                 fatigue_suffix = t("tray.hint.fatigue_tired")
 
+        stance = details.get("stance", "sitting")
+
         if state == "good":
-            self._mi_hint.title = t("tray.hint.good") + fatigue_suffix
+            hint_key = "tray.hint.good_standing" if stance == "standing" else "tray.hint.good"
+            self._mi_hint.title = t(hint_key) + fatigue_suffix
         elif state == "bad":
             reasons = details.get("reasons", [])
             if reasons:
@@ -476,6 +488,15 @@ class TrayApp(rumps.App):
                 time.sleep(600)
                 sender.title = t("tray.menu.pause_alerts")
             threading.Thread(target=restore, daemon=True).start()
+
+    # --- Stance ---
+
+    def _cycle_stance(self, sender):
+        """循环切换 stance_mode: auto → sitting → standing → auto"""
+        cycle = {"auto": "sitting", "sitting": "standing", "standing": "auto"}
+        self.settings.stance_mode = cycle.get(self.settings.stance_mode, "auto")
+        self.settings.save()
+        sender.title = self._stance_label()
 
     # --- Report ---
 
