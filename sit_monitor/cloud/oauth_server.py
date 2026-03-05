@@ -36,13 +36,15 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         result: OAuthCallbackResult = self.server._oauth_result
         expected_state: str = self.server._oauth_state
 
-        # 验证 state 参数
-        state = params.get("state", [""])[0]
-        if state != expected_state:
-            result.error = t("oauth.csrf_error")
-            self._send_response(t("oauth.auth_security_fail"), 400)
-            result.ready.set()
-            return
+        # 验证 state 参数（Supabase 托管 OAuth 时跳过，由 Supabase 负责 CSRF 验证）
+        skip_state = getattr(self.server, "_oauth_skip_state", False)
+        if not skip_state:
+            state = params.get("state", [""])[0]
+            if state != expected_state:
+                result.error = t("oauth.csrf_error")
+                self._send_response(t("oauth.auth_security_fail"), 400)
+                result.ready.set()
+                return
 
         # 检查 error
         error = params.get("error", [""])[0]
@@ -144,8 +146,11 @@ class OAuthCallbackServer:
         return f"http://localhost:{self.port}/callback"
 
     def start(self):
-        """启动服务器（后台线程）"""
-        self._thread = threading.Thread(target=self._server.handle_request, daemon=True)
+        """启动服务器（后台线程，持续监听直到收到结果）"""
+        def _serve_until_done():
+            while not self.result.ready.is_set():
+                self._server.handle_request()
+        self._thread = threading.Thread(target=_serve_until_done, daemon=True)
         self._thread.start()
 
     def wait(self, timeout: float = 120) -> OAuthCallbackResult:

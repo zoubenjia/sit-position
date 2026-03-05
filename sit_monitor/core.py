@@ -166,6 +166,8 @@ class PostureMonitor:
         _say_proc = None  # 跟踪当前 say 进程，用于离开时停止语音
         last_check_time = 0
         away_start_time = None
+        away_accum = 0  # 累计离开秒数（用于判断是否真正离开）
+        last_away_check = None  # 上次处于 away 状态的时间
         no_person_adjust_notified = False   # 已发送"调整摄像头"提示
         no_person_preview_notified = False  # 已发送"打开显示摄像头"提示
         media_paused = False
@@ -265,7 +267,12 @@ class PostureMonitor:
                     if away_start_time is None:
                         away_start_time = now
 
-                    if (now - away_start_time) >= 60:
+                    # 累计离开时间（即使中间偶尔误检测到人也不会重置）
+                    if last_away_check is not None:
+                        away_accum += now - last_away_check
+                    last_away_check = now
+
+                    if (now - away_start_time) >= 60 or away_accum >= 60:
                         sit_start_time = None
 
                     away_duration = now - away_start_time
@@ -331,9 +338,13 @@ class PostureMonitor:
                     if away_start_time is not None and (now - away_start_time) >= s.away_seconds:
                         last_notify_time = 0
                         bad_start_time = None
-                    away_start_time = None
-                    no_person_adjust_notified = False
-                    no_person_preview_notified = False
+                    # 只有连续在场超过 PRESENT_STREAK_REQUIRED 次才算真正回来
+                    if present_streak >= PRESENT_STREAK_REQUIRED:
+                        away_start_time = None
+                        away_accum = 0
+                        last_away_check = None
+                        no_person_adjust_notified = False
+                        no_person_preview_notified = False
 
                     if sit_start_time is None:
                         sit_start_time = now

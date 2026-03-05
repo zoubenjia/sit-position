@@ -42,9 +42,10 @@ def start_google_oauth(cloud_client, timeout: float = 120) -> dict:
         server.stop()
         return {"success": False, "error": t("social_auth.no_url")}
 
-    # 追加 state 参数
-    separator = "&" if "?" in oauth_url else "?"
-    oauth_url_with_state = f"{oauth_url}{separator}state={server.state}"
+    # Supabase OAuth URL 已含 state 参数（由 Supabase 管理 CSRF 验证）
+    # 本地回调服务器跳过 state 验证，避免重复 state 导致 Google 400 错误
+    server._server._oauth_skip_state = True
+    oauth_url_with_state = oauth_url
 
     # 打开浏览器
     try:

@@ -1,5 +1,5 @@
 name: sit_position_mobile
-description: 手机端坐姿监控 — 低头族检测
+description: NeckCheck — posture monitoring and fatigue detection
 publish_to: 'none'
 version: 1.0.0+1
 

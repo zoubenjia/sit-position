@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sit Position Mobile</string>
+	<string>NeckCheck</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -48,7 +48,9 @@
 		</dict>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>精准模式需要使用前置摄像头检测疲劳状态（眨眼、打哈欠）</string>
+	<string>NeckCheck uses the front camera to detect fatigue signs like eye blinks and yawns in Precision Mode.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>NeckCheck uses motion sensors to detect phone tilt angle and monitor your posture.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
