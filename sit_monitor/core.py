@@ -118,6 +118,12 @@ class PostureMonitor:
             return False
         return True
 
+    def _sleep(self, seconds):
+        """可中断的 sleep：每 0.2 秒检查 self.running"""
+        end = time.time() + seconds
+        while self.running and time.time() < end:
+            time.sleep(0.2)
+
     def stop(self):
         self.running = False
 
@@ -190,13 +196,15 @@ class PostureMonitor:
                 if cap is None or not cap.isOpened():
                     if cap is not None:
                         cap.release()
+                    if not self.running:
+                        break
                     cap = cv2.VideoCapture(s.camera)
                     if not cap.isOpened():
                         cap.release()
                         cap = None
                         self._notify_state("camera_wait")
                         print(f"\r{t('core.camera_wait'):<80}", end="", flush=True)
-                        time.sleep(camera_retry_interval)
+                        self._sleep(camera_retry_interval)
                         continue
                     print(f"\r{t('core.camera_connected'):<80}", end="", flush=True)
 
@@ -213,7 +221,7 @@ class PostureMonitor:
                                 break
                         time.sleep(0.03)
                     else:
-                        time.sleep(min(wait, 1.0))
+                        self._sleep(min(wait, 1.0))
                     continue
 
                 last_check_time = now
@@ -223,6 +231,8 @@ class PostureMonitor:
                     cap.release()
                     cap = None
                     bad_start_time = None
+                    if not self.running:
+                        break
                     continue
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

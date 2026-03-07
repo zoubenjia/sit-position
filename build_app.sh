@@ -3,6 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# 激活 venv
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+fi
+
 echo "=== SitMonitor macOS App 构建 ==="
 
 # 1. 检查 PyInstaller

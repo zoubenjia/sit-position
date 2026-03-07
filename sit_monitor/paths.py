@@ -15,7 +15,11 @@ def _bundle_dir() -> str:
 
 
 def _dev_root() -> str:
-    """开发模式下的项目根目录（sit-position/）"""
+    """开发模式下的项目根目录（sit-position/）
+    支持 SITMONITOR_DATA_DIR 环境变量（Homebrew 安装用）"""
+    env_dir = os.environ.get("SITMONITOR_DATA_DIR")
+    if env_dir and os.path.isdir(env_dir):
+        return env_dir
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 

@@ -18,7 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
@@ -388,7 +388,17 @@ class TrayApp(rumps.App):
         if self.monitor:
             self.monitor.stop()
             if self.monitor_thread:
-                self.monitor_thread.join(timeout=5)
+                self.monitor_thread.join(timeout=3)
+                if self.monitor_thread.is_alive():
+                    # 线程仍卡在阻塞调用中，强制释放摄像头
+                    log.warning("Monitor thread did not stop in time, releasing camera")
+                    try:
+                        import cv2
+                        # 尝试打开再关闭摄像头，强制释放资源
+                        _cap = cv2.VideoCapture(self.settings.camera)
+                        _cap.release()
+                    except Exception:
+                        pass
             self.monitor = None
             self.monitor_thread = None
         self._state = "stopped"
