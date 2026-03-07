@@ -89,11 +89,36 @@
 
 > 设置 → 隐私 → 摄像头 → 允许应用访问摄像头
 
-## 快速开始
+## 安装
+
+### 方式一：Homebrew（推荐，macOS）
+
+```bash
+brew tap zoubenjia/tap
+brew install sit-monitor
+
+# 启动菜单栏模式
+sit-monitor --tray
+
+# 开机自启
+brew services start sit-monitor
+```
+
+### 方式二：pip 安装
+
+```bash
+pip install git+https://github.com/zoubenjia/sit-position.git
+
+# 需要手动下载模型文件
+curl -sSL -o pose_landmarker_lite.task \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+```
+
+### 方式三：从源码运行
 
 **没装 Git？** 直接[下载 ZIP](https://github.com/zoubenjia/sit-position/archive/refs/heads/main.zip)，解压后进入文件夹运行 setup 即可。
 
-### macOS
+#### macOS
 
 ```bash
 git clone https://github.com/zoubenjia/sit-position.git
@@ -101,7 +126,7 @@ cd sit-position
 bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
 
-### Windows
+#### Windows
 
 ```powershell
 git clone https://github.com/zoubenjia/sit-position.git
@@ -215,6 +240,22 @@ A: 运行 `bash service.sh status` 查看状态，`bash service.sh start` 手动
 - macOS: rumps 托盘 + osascript 通知 + say TTS
 - Windows: pystray 托盘 + winotify 通知 + pyttsx3 TTS
 - 云端: Supabase (PostgreSQL + Auth + REST API) + httpx
+- 打包: PyInstaller (macOS .app) + Homebrew Formula
+
+## 版本历史
+
+### v1.2.0
+- 修复监控 stop 响应慢/卡死问题
+- 支持 Homebrew 安装（`brew install zoubenjia/tap/sit-monitor`）
+- 支持 `brew services` 开机自启
+- Apple 代码签名 + 公证支持（entitlements）
+
+### v1.1.0
+- 支持站立办公姿势监控，三种模式可切换
+- Google OAuth 登录
+- 俯卧撑对战功能
+- 疲劳检测（眨眼率、打哈欠）
+- 中英文双语支持
 
 ## License
 
