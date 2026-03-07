@@ -23,3 +23,6 @@ sit-monitor = "sit_monitor.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["sit_monitor*"]
+
+[tool.setuptools.package-data]
+sit_monitor = ["assets/*.png", "i18n/*.py"]
