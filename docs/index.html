@@ -26,6 +26,35 @@ body {
 a { color: var(--green); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* Language toggle */
+.lang-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.lang-toggle:hover {
+  background: var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* i18n transition */
+[data-zh] {
+  transition: opacity 0.15s ease;
+}
+
 /* Hero */
 .hero {
   text-align: center;
@@ -226,32 +255,39 @@ footer {
   .hero p { font-size: 1rem; }
   .hero-icons { gap: 16px; }
   .hero-icon { width: 48px; height: 48px; font-size: 1.5rem; }
+  .lang-toggle { top: 12px; right: 12px; padding: 5px 10px; font-size: 0.8rem; }
 }
 </style>
 </head>
 <body>
 
+<!-- Language Toggle -->
+<button class="lang-toggle" id="langToggle" onclick="toggleLang()">
+  <span>&#x1F310;</span>
+  <span id="langLabel">English</span>
+</button>
+
 <section class="hero">
   <h1>Sit Monitor</h1>
-  <p>用摄像头实时检测坐姿，智能图标指示具体问题，语音提醒纠正。开源、隐私优先。</p>
+  <p data-zh="用摄像头实时检测坐姿，智能图标指示具体问题，语音提醒纠正。开源、隐私优先。" data-en="Real-time posture detection via camera, with smart icon indicators and voice reminders. Open source, privacy first.">用摄像头实时检测坐姿，智能图标指示具体问题，语音提醒纠正。开源、隐私优先。</p>
   <div class="hero-icons">
     <div class="hero-icon good">
       <span>&#x1F9D1;&#x200D;&#x1F4BB;</span>
-      <span class="label">姿势良好</span>
+      <span class="label" data-zh="姿势良好" data-en="Good Posture">姿势良好</span>
     </div>
     <div class="hero-icon warn">
       <span>&#x1F625;</span>
-      <span class="label">颈部前倾</span>
+      <span class="label" data-zh="颈部前倾" data-en="Neck Forward">颈部前倾</span>
     </div>
     <div class="hero-icon bad">
       <span>&#x1F6A8;</span>
-      <span class="label">多项问题</span>
+      <span class="label" data-zh="多项问题" data-en="Multiple Issues">多项问题</span>
     </div>
   </div>
   <div class="cta">
     <a class="btn btn-primary" href="https://github.com/zoubenjia/sit-position/releases/latest">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      下载 DMG (macOS)
+      <span data-zh="下载 DMG (macOS)" data-en="Download DMG (macOS)">下载 DMG (macOS)</span>
     </a>
     <a class="btn btn-secondary" href="https://github.com/zoubenjia/sit-position">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6.02 0c2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12 12 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -260,57 +296,57 @@ footer {
   </div>
 </section>
 
-<!-- Demo video placeholder — 录制后替换 -->
+<!-- Demo video placeholder -->
 <section class="demo">
-  <img src="demo.gif" alt="Sit Monitor Demo — 姿势良好(绿) → 颈部前倾(橙) → 多项问题(红) → 恢复(绿)" style="width:100%;border-radius:10px;">
+  <img src="demo.gif" data-alt-zh="Sit Monitor 演示 — 姿势良好(绿) → 颈部前倾(橙) → 多项问题(红) → 恢复(绿)" data-alt-en="Sit Monitor Demo — Good posture(green) → Neck forward(orange) → Multiple issues(red) → Recovered(green)" alt="Sit Monitor 演示 — 姿势良好(绿) → 颈部前倾(橙) → 多项问题(红) → 恢复(绿)" style="width:100%;border-radius:10px;">
 </section>
 
 <section class="features">
   <div class="feature">
     <div class="icon">&#x1F3AF;</div>
-    <h3>四项姿势检测</h3>
-    <p>肩膀倾斜、头部前倾、头部侧倾、躯干前倾，实时角度计算，坐姿站姿通用。</p>
+    <h3 data-zh="四项姿势检测" data-en="4-Point Posture Detection">四项姿势检测</h3>
+    <p data-zh="肩膀倾斜、头部前倾、头部侧倾、躯干前倾，实时角度计算，坐姿站姿通用。" data-en="Shoulder tilt, head forward, head tilt, torso lean — real-time angle calculation for both sitting and standing.">肩膀倾斜、头部前倾、头部侧倾、躯干前倾，实时角度计算，坐姿站姿通用。</p>
   </div>
   <div class="feature">
     <div class="icon">&#x1F7E2;</div>
-    <h3>动态图标指示</h3>
-    <p>托盘图标实时变化：绿色=良好，橙色=单项问题，红色=多项问题，一眼看出哪里不对。</p>
+    <h3 data-zh="动态图标指示" data-en="Dynamic Icon Indicators">动态图标指示</h3>
+    <p data-zh="托盘图标实时变化：绿色=良好，橙色=单项问题，红色=多项问题，一眼看出哪里不对。" data-en="Tray icon changes in real time: green=good, orange=single issue, red=multiple issues. See what's wrong at a glance.">托盘图标实时变化：绿色=良好，橙色=单项问题，红色=多项问题，一眼看出哪里不对。</p>
   </div>
   <div class="feature">
     <div class="icon">&#x1F50A;</div>
-    <h3>智能提醒</h3>
-    <p>坏姿势持续 30 秒弹窗提醒，纠正后语音鼓励。久坐 45 分钟提醒活动。</p>
+    <h3 data-zh="智能提醒" data-en="Smart Reminders">智能提醒</h3>
+    <p data-zh="坏姿势持续 30 秒弹窗提醒，纠正后语音鼓励。久坐 45 分钟提醒活动。" data-en="Alert after 30s of bad posture, voice encouragement after correction. Sedentary reminder after 45 minutes.">坏姿势持续 30 秒弹窗提醒，纠正后语音鼓励。久坐 45 分钟提醒活动。</p>
   </div>
   <div class="feature">
     <div class="icon">&#x1F3CB;&#xFE0F;</div>
-    <h3>俯卧撑训练</h3>
-    <p>语音引导就位，实时计数，姿势纠正，训练记录。还能和朋友对战 PK。</p>
+    <h3 data-zh="俯卧撑训练" data-en="Push-up Training">俯卧撑训练</h3>
+    <p data-zh="语音引导就位，实时计数，姿势纠正，训练记录。还能和朋友对战 PK。" data-en="Voice-guided positioning, real-time counting, form correction, training history. Challenge friends to PK battles.">语音引导就位，实时计数，姿势纠正，训练记录。还能和朋友对战 PK。</p>
   </div>
   <div class="feature">
     <div class="icon">&#x23F8;&#xFE0F;</div>
-    <h3>离开自动暂停</h3>
-    <p>人离开摄像头自动暂停浏览器视频，回来自动恢复。支持主流浏览器。</p>
+    <h3 data-zh="离开自动暂停" data-en="Auto-Pause on Leave">离开自动暂停</h3>
+    <p data-zh="人离开摄像头自动暂停浏览器视频，回来自动恢复。支持主流浏览器。" data-en="Auto-pauses browser video when you leave, resumes when you return. Supports major browsers.">人离开摄像头自动暂停浏览器视频，回来自动恢复。支持主流浏览器。</p>
   </div>
   <div class="feature">
     <div class="icon">&#x1F30F;</div>
-    <h3>中英文双语</h3>
-    <p>菜单、通知、语音播报全面本地化，一键切换。macOS 和 Windows 双平台。</p>
+    <h3 data-zh="中英文双语" data-en="Bilingual Support">中英文双语</h3>
+    <p data-zh="菜单、通知、语音播报全面本地化，一键切换。macOS 和 Windows 双平台。" data-en="Menu, notifications, voice — fully localized in Chinese &amp; English. One-click switch. macOS &amp; Windows.">菜单、通知、语音播报全面本地化，一键切换。macOS 和 Windows 双平台。</p>
   </div>
 </section>
 
 <section class="privacy">
   <div class="privacy-card">
-    <h2>&#x1F512; 隐私优先</h2>
-    <p>所有图像处理在本地完成，摄像头画面不保存、不录制、不上传。程序只计算关节角度，不存储任何图像。代码完全开源。</p>
+    <h2 data-zh="&#x1F512; 隐私优先" data-en="&#x1F512; Privacy First">&#x1F512; 隐私优先</h2>
+    <p data-zh="所有图像处理在本地完成，摄像头画面不保存、不录制、不上传。程序只计算关节角度，不存储任何图像。代码完全开源。" data-en="All image processing is done locally. Camera feed is never saved, recorded, or uploaded. Only joint angles are calculated — no images stored. Fully open source.">所有图像处理在本地完成，摄像头画面不保存、不录制、不上传。程序只计算关节角度，不存储任何图像。代码完全开源。</p>
   </div>
 </section>
 
 <section class="install">
-  <h2>快速开始</h2>
+  <h2 data-zh="快速开始" data-en="Quick Start">快速开始</h2>
   <div class="install-options">
     <div class="install-option">
-      <div class="method">DMG 安装</div>
-      <code><a href="https://github.com/zoubenjia/sit-position/releases/latest">下载 SitMonitor.dmg</a></code>
+      <div class="method" data-zh="DMG 安装" data-en="DMG Install">DMG 安装</div>
+      <code><a href="https://github.com/zoubenjia/sit-position/releases/latest" data-zh="下载 SitMonitor.dmg" data-en="Download SitMonitor.dmg">下载 SitMonitor.dmg</a></code>
     </div>
     <div class="install-option">
       <div class="method">Homebrew</div>
@@ -334,6 +370,60 @@ footer {
     Made by <a href="https://github.com/zoubenjia">Benjia Zou</a>
   </p>
 </footer>
+
+<script>
+(function() {
+  var currentLang = localStorage.getItem('sit-monitor-lang') || 'zh';
+
+  function applyLang(lang) {
+    currentLang = lang;
+    localStorage.setItem('sit-monitor-lang', lang);
+
+    // Update html lang attribute
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+
+    // Update page title
+    document.title = lang === 'zh'
+      ? 'Sit Monitor — 智能坐姿监控'
+      : 'Sit Monitor — Smart Posture Monitor';
+
+    // Update meta description
+    var metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.content = lang === 'zh'
+        ? '用摄像头实时检测坐姿，智能提醒纠正。开源、隐私优先、macOS & Windows。'
+        : 'Real-time posture detection via camera with smart reminders. Open source, privacy first. macOS & Windows.';
+    }
+
+    // Update all elements with data-zh/data-en attributes
+    var elements = document.querySelectorAll('[data-' + lang + ']');
+    for (var i = 0; i < elements.length; i++) {
+      var el = elements[i];
+      el.textContent = el.getAttribute('data-' + lang);
+    }
+
+    // Update alt text for images
+    var imgs = document.querySelectorAll('[data-alt-' + lang + ']');
+    for (var j = 0; j < imgs.length; j++) {
+      imgs[j].alt = imgs[j].getAttribute('data-alt-' + lang);
+    }
+
+    // Update toggle button label
+    var label = document.getElementById('langLabel');
+    if (label) {
+      label.textContent = lang === 'zh' ? 'English' : '中文';
+    }
+  }
+
+  // Make toggleLang available globally
+  window.toggleLang = function() {
+    applyLang(currentLang === 'zh' ? 'en' : 'zh');
+  };
+
+  // Apply saved language on load
+  applyLang(currentLang);
+})();
+</script>
 
 </body>
 </html>

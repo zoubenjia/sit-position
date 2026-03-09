@@ -1,3 +1,5 @@
+[🇨🇳 中文](#sit-position--坐姿监控--运动教练) | [🇬🇧 English](#sit-position--posture-monitor--exercise-coach)
+
 # Sit Position — 坐姿监控 & 运动教练
 
 用摄像头实时检测坐姿/站姿、语音引导俯卧撑训练。支持 macOS 和 Windows 10/11。支持中文/英文双语切换。
@@ -271,6 +273,286 @@ A: 运行 `bash service.sh status` 查看状态，`bash service.sh start` 手动
 - 俯卧撑对战功能
 - 疲劳检测（眨眼率、打哈欠）
 - 中英文双语支持
+
+## License
+
+MIT
+
+---
+
+# Sit Position — Posture Monitor & Exercise Coach
+
+Real-time sitting/standing posture detection via camera, voice-guided push-up training. Supports macOS and Windows 10/11. Bilingual Chinese/English support.
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Sit Monitor Demo" width="600">
+</p>
+
+## Features
+
+### Sitting/Standing Posture Monitoring
+- **Posture Detection** — Four metrics: shoulder tilt, head forward, head tilt, torso lean. Works for both sitting and standing.
+- **Dynamic Icons** — Tray icon reflects specific posture issues in real time: neck forward / head tilt / uneven shoulders / torso lean, each with distinct shape and color.
+- **Standing Desk Support** — Three modes: Auto-detect / Sitting / Standing, switchable from the tray menu.
+- **Pop-up Alerts** — Auto alert on sustained bad posture, with adjustable thresholds and duration.
+- **Positive Feedback** — Voice encouragement after posture correction: "Good posture, keep it up"
+- **Sedentary/Standing Reminders** — Alert after 45 minutes of continuous sitting or standing (adjustable).
+- **Auto-Pause on Leave** — Auto-pauses browser video when you leave the camera, resumes on return (Chrome/Safari/Arc/Firefox).
+- **Meeting Compatible** — Yields camera during video calls, reconnects after.
+- **Auto-Start** — One command to install as a background service.
+
+### Push-up Training
+- **Voice-Guided Setup** — Step-by-step: place laptop → stand → lie down → ready
+- **Real-time Counting** — Voice counts "one, two, three..."
+- **Form Correction** — Hip sag/pike, shallow depth, head drop
+- **Auto-Finish** — Stand up to end training, summary announced
+- **Training Log** — Data saved to `logs/exercise.jsonl`, queryable via MCP
+
+### Push-up Battles
+- **Quick Battle** — One-click opponent selection from leaderboard for push-up PK
+- **Quality-Weighted Scoring** — `score = reps × (0.7 + 0.3 × good_reps / reps)`, encourages quality without penalizing quantity
+- **Async Mode** — Each player completes independently, winner determined automatically
+- **Rep Grading** — Each rep auto-graded as good / shallow / bad, factored into battle score
+- **Battle Achievements** — First battle, winner, 3-win streak
+
+### Leaderboard & Social (Cloud, Optional)
+- **Daily/Weekly Leaderboard** — Ranked by good posture rate
+- **Achievement System** — 10 badges (First Day, 3-Day Streak, Weekly Champion, Perfect Day, 100-Hour Pro, Social Butterfly, Early Bird, First Battle, Winner, 3-Win Streak)
+- **Likes** — Give likes to other users' daily reports
+- **Friend Challenges** — Challenge others on posture rate / monitoring duration
+- **Google Login** — Optional Google account linking for multi-device sync, unlinkable anytime
+- **Privacy Control** — Off by default; data sharing toggleable anytime
+- **Zero Barrier** — No account required, device auto-binds identity, just set a nickname
+
+### Multilingual Support (i18n)
+- **Chinese/English Bilingual** — Menu, notifications, voice, reports fully localized
+- **One-Click Switch** — Toggle at the bottom of tray menu: 🌐 English / 🌐 中文
+- **TTS Auto-Adaptation** — Chinese uses Tingting, English uses Samantha (macOS)
+- **Easy to Extend** — Pure Python dict implementation, add a new language by creating one `.py` file
+
+### Simple / Advanced Mode
+- **Simple Mode** (default) — Shows only monitoring, training, battles, stats. Clean for new users.
+- **Advanced Mode** — Full settings, social, account management. Toggle at menu bottom.
+
+## System Requirements
+
+### macOS
+- macOS 13+ (Ventura or later)
+- MacBook built-in camera or external camera
+- tmux (for background running: `brew install tmux`)
+
+### Windows
+- Windows 10/11
+- Camera (built-in or external)
+- Python 3.12+ (check "Add Python to PATH" during install)
+
+### Permissions
+
+#### macOS Permissions
+
+**1. Camera Permission (Required)**
+
+Your terminal app (iTerm2 / Terminal) needs camera access:
+
+> System Settings → Privacy & Security → Camera → Check your terminal app
+
+If your terminal app isn't listed, the system will prompt on first run. If accidentally denied, manually enable it in the settings above.
+
+**2. Accessibility Permission (for auto-pause)**
+
+For `--auto-pause` video auto-pause, allow terminal to control other apps:
+
+> System Settings → Privacy & Security → Accessibility → Check your terminal app
+
+**3. Automation Permission (for auto-pause)**
+
+On first video pause trigger, the system asks to allow terminal to control browsers. Select "Allow".
+
+> If permissions don't take effect, try restarting the terminal app.
+
+#### Windows Permissions
+
+System prompts for camera permission on first run. Click "Allow".
+
+> Settings → Privacy → Camera → Allow apps to access camera
+
+## Installation
+
+### Option 1: DMG Install (macOS, Easiest)
+
+Download `SitMonitor.dmg` from [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest), open and drag to Applications. Apple code-signed + notarized, Gatekeeper won't block.
+
+### Option 2: Homebrew (Recommended, macOS)
+
+```bash
+brew tap zoubenjia/tap
+brew install sit-monitor
+
+# Start tray mode
+sit-monitor --tray
+
+# Auto-start on boot
+brew services start sit-monitor
+```
+
+### Option 3: pip Install
+
+```bash
+pip install git+https://github.com/zoubenjia/sit-position.git
+
+# Download model file manually
+curl -sSL -o pose_landmarker_lite.task \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+```
+
+### Option 4: From Source
+
+**No Git?** Just [download ZIP](https://github.com/zoubenjia/sit-position/archive/refs/heads/main.zip), extract and run setup.
+
+#### macOS
+
+```bash
+git clone https://github.com/zoubenjia/sit-position.git
+cd sit-position
+bash setup.sh    # One-click setup + auto-start + launch tray
+```
+
+#### Windows
+
+```powershell
+git clone https://github.com/zoubenjia/sit-position.git
+cd sit-position
+powershell -ExecutionPolicy Bypass -File setup.ps1    # One-click setup + auto-start + launch tray
+```
+
+## Background Service
+
+### macOS
+
+```bash
+bash service.sh install   # Install auto-start
+bash service.sh start     # Start
+bash service.sh stop      # Stop
+bash service.sh status    # Check status
+bash service.sh update    # Update from remote
+bash service.sh log       # View logs
+```
+
+### Windows
+
+```powershell
+.\service.ps1 install     # Install auto-start + start
+.\service.ps1 start       # Start
+.\service.ps1 stop        # Stop
+.\service.ps1 restart     # Restart
+.\service.ps1 status      # Check status
+.\service.ps1 update      # Update from remote
+.\service.ps1 log         # View logs
+.\service.ps1 uninstall   # Uninstall auto-start
+```
+
+## Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--camera` | 0 | Camera index |
+| `--interval` | 5.0 | Detection interval (seconds) |
+| `--bad-seconds` | 30 | Bad posture duration before alert |
+| `--cooldown` | 180 | Minimum interval between alerts |
+| `--auto-pause` | off | Auto-pause video on leave |
+| `--away-seconds` | 3.0 | Seconds away before pause |
+| `--shoulder-threshold` | 10° | Shoulder tilt threshold |
+| `--neck-threshold` | 15° | Head forward threshold |
+| `--torso-threshold` | 8° | Torso lean threshold |
+| `--debug` | off | Show camera feed and skeleton |
+
+## Cloud Social (Optional)
+
+Social features are off by default. To enable:
+
+1. Click **"Enable Cloud"** in the tray menu
+2. Set a nickname (Tray → Social → Nickname)
+3. Leaderboard, achievements, and challenges become available
+
+Cloud uses Supabase free tier. Data includes only posture stats (good rate, duration) — no images or personal info. Toggle **"Share Data"** to stop sharing anytime.
+
+### MCP Tools
+
+Available via AI assistants (Claude, etc.):
+
+| Tool | Description |
+|------|-------------|
+| `social_leaderboard` | View daily/weekly leaderboard |
+| `social_my_achievements` | View achievements |
+| `social_send_like` | Like another user |
+| `social_create_challenge` | Create a posture challenge |
+| `social_my_challenges` | View challenges |
+| `social_profile` | View social profile |
+| `battle_create` | Create a push-up battle |
+| `battle_accept` | Accept a battle invite |
+| `battle_cancel` | Cancel a battle |
+| `battle_list` | List my battles |
+| `battle_details` | View battle details |
+| `battle_start_exercise` | Start battle exercise |
+| `auth_status` | Check auth status |
+| `auth_link_google` | Link Google account |
+| `auth_unlink_provider` | Unlink social account |
+
+## Privacy
+
+**Your privacy is the top priority.**
+
+- All image processing is done **locally** — camera feed is **never saved or recorded**
+- Only joint angle values are calculated — **no images stored**
+- Cloud social is **off by default**; only posture stats (good rate, duration) are uploaded when enabled
+- Data sharing can be turned off anytime
+- No personal information collected
+- Google login is optional, only fetches nickname and avatar, unlinkable anytime
+- OAuth callback uses random port + state parameter for CSRF protection
+- Fully open source for audit
+
+## FAQ
+
+**Q: "Camera in use" message after starting?**
+A: Likely in a video call. The app waits for the camera to become available and auto-reconnects when the call ends.
+
+**Q: Not receiving posture alert pop-ups?**
+A: Check if your terminal app has Accessibility permission (System Settings → Privacy & Security → Accessibility).
+
+**Q: Auto-pause not pausing video?**
+A: 1) Check Accessibility and Automation permissions; 2) Chrome/Safari/Arc support background tab control, Firefox only supports foreground tab.
+
+**Q: Installed but tmux session not starting?**
+A: Run `bash service.sh status` to check, `bash service.sh start` to manually start.
+
+## Tech Stack
+
+- Python 3.12 + MediaPipe Pose + OpenCV
+- macOS: rumps tray + osascript notifications + say TTS
+- Windows: pystray tray + winotify notifications + pyttsx3 TTS
+- Cloud: Supabase (PostgreSQL + Auth + REST API) + httpx
+- Icons: Pillow dynamic posture indicator icons
+- Packaging: PyInstaller (macOS .app) + Homebrew Formula + Apple notarization
+
+## Version History
+
+### v1.3.0
+- Dynamic tray icons: icon shape and color change based on specific posture issues (neck forward / head tilt / uneven shoulders / torso lean)
+- Added head tilt detection metric
+- DMG installer, Apple signed + notarized, download and use
+
+### v1.2.0
+- Fixed slow/stuck monitoring stop
+- Homebrew install support (`brew install zoubenjia/tap/sit-monitor`)
+- `brew services` auto-start support
+- Apple code signing + notarization (entitlements)
+
+### v1.1.0
+- Standing desk posture monitoring, three switchable modes
+- Google OAuth login
+- Push-up battle feature
+- Fatigue detection (blink rate, yawning)
+- Chinese/English bilingual support
 
 ## License
 
