@@ -5,7 +5,8 @@
 ## 功能
 
 ### 坐姿/站姿监控
-- **姿势检测** — 肩膀倾斜、头部前倾、躯干前倾三项指标，坐姿站姿通用
+- **姿势检测** — 肩膀倾斜、头部前倾、头部侧倾、躯干前倾四项指标，坐姿站姿通用
+- **动态图标** — 托盘图标实时反映具体姿势问题：颈前倾/头侧倾/肩不平/躯干前倾各有不同变形和颜色
 - **站立办公支持** — 三种模式：自动检测 / 坐姿 / 站姿，托盘菜单一键切换
 - **弹窗提醒** — 持续坏姿势自动弹窗，可调阈值和时长
 - **正向反馈** — 纠正姿势后语音鼓励"坐姿很好，继续保持"
@@ -91,7 +92,11 @@
 
 ## 安装
 
-### 方式一：Homebrew（推荐，macOS）
+### 方式一：DMG 安装（macOS，最简单）
+
+从 [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest) 下载 `SitMonitor.dmg`，打开后拖入 Applications 即可。已通过 Apple 代码签名 + 公证，macOS Gatekeeper 不会拦截。
+
+### 方式二：Homebrew（推荐，macOS）
 
 ```bash
 brew tap zoubenjia/tap
@@ -104,7 +109,7 @@ sit-monitor --tray
 brew services start sit-monitor
 ```
 
-### 方式二：pip 安装
+### 方式三：pip 安装
 
 ```bash
 pip install git+https://github.com/zoubenjia/sit-position.git
@@ -114,7 +119,7 @@ curl -sSL -o pose_landmarker_lite.task \
   https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
 ```
 
-### 方式三：从源码运行
+### 方式四：从源码运行
 
 **没装 Git？** 直接[下载 ZIP](https://github.com/zoubenjia/sit-position/archive/refs/heads/main.zip)，解压后进入文件夹运行 setup 即可。
 
@@ -240,9 +245,15 @@ A: 运行 `bash service.sh status` 查看状态，`bash service.sh start` 手动
 - macOS: rumps 托盘 + osascript 通知 + say TTS
 - Windows: pystray 托盘 + winotify 通知 + pyttsx3 TTS
 - 云端: Supabase (PostgreSQL + Auth + REST API) + httpx
-- 打包: PyInstaller (macOS .app) + Homebrew Formula
+- 图标: Pillow 动态生成姿势指示图标
+- 打包: PyInstaller (macOS .app) + Homebrew Formula + Apple 公证
 
 ## 版本历史
+
+### v1.3.0
+- 动态托盘图标：根据具体姿势问题（颈前倾/头侧倾/肩不平/躯干前倾）显示不同图标变形和颜色
+- 新增头部侧倾检测指标
+- DMG 安装方式，Apple 签名 + 公证，下载即用
 
 ### v1.2.0
 - 修复监控 stop 响应慢/卡死问题
