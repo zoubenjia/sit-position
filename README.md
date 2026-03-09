@@ -2,6 +2,10 @@
 
 用摄像头实时检测坐姿/站姿、语音引导俯卧撑训练。支持 macOS 和 Windows 10/11。支持中文/英文双语切换。
 
+<p align="center">
+  <img src="docs/demo.gif" alt="Sit Monitor Demo" width="600">
+</p>
+
 ## 功能
 
 ### 坐姿/站姿监控
