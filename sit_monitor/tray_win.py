@@ -17,11 +17,18 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.1.0"
+VERSION = "1.3.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# 图标路径
+# 动态图标生成
+try:
+    from sit_monitor.icon_gen import icon_image as _gen_icon_image
+    _HAS_ICON_GEN = True
+except ImportError:
+    _HAS_ICON_GEN = False
+
+# 静态图标路径（回退用）
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 _ICON_FILES = {
     "good": os.path.join(_ASSETS, "icon_good_color.png"),
@@ -34,7 +41,9 @@ _ICON_FILES = {
 
 _WIN_ICON_SIZE = (64, 64)
 
-def _load_icon(state):
+def _load_icon(state, problems=None):
+    if _HAS_ICON_GEN:
+        return _gen_icon_image(state, problems or [], size=64)
     path = _ICON_FILES.get(state, _ICON_FILES["stopped"])
     if os.path.exists(path):
         img = Image.open(path).resize(_WIN_ICON_SIZE, Image.LANCZOS)
@@ -191,12 +200,13 @@ class TrayApp:
     def _on_state_change(self, state, details):
         self._state = state
         self._details = details
-        self._update_icon(state)
+        problems = details.get("problems", [])
+        self._update_icon(state, problems)
         self._update_posture_hint(state, details)
 
-    def _update_icon(self, state):
+    def _update_icon(self, state, problems=None):
         if self._icon:
-            self._icon.icon = _load_icon(state)
+            self._icon.icon = _load_icon(state, problems)
 
     def _update_posture_hint(self, state, details):
         if state == "good":

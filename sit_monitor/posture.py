@@ -108,7 +108,11 @@ def detect_stance(landmarks, mode="auto"):
 
 
 def evaluate_posture(landmarks, thresholds):
-    """综合判定坐姿，返回 (is_bad, details_dict, reasons)"""
+    """综合判定坐姿，返回 (is_bad, details_dict, reasons, problem_types)
+
+    problem_types: 结构化问题标识列表，如 ["neck", "shoulder"]，
+    用于驱动图标动态生成。
+    """
     st = shoulder_tilt(landmarks)
     ht = head_tilt(landmarks)
     hf = head_forward_angle(landmarks)
@@ -116,6 +120,7 @@ def evaluate_posture(landmarks, thresholds):
 
     details = {"shoulder": st, "head_tilt": ht, "neck": hf, "torso": tf}
     reasons = []
+    problem_types = []
 
     if st is not None:
         tilt = abs(st)
@@ -123,6 +128,7 @@ def evaluate_posture(landmarks, thresholds):
         if tilt > thresholds["shoulder"]:
             side = t("posture.shoulder_left_high") if st > 0 else t("posture.shoulder_right_high")
             reasons.append(t("posture.shoulder_skew", side=side, angle=f"{tilt:.1f}"))
+            problem_types.append("shoulder")
 
     if ht is not None:
         ht_abs = abs(ht)
@@ -130,11 +136,14 @@ def evaluate_posture(landmarks, thresholds):
         if ht_abs > thresholds.get("head_tilt", 8.0):
             side = t("posture.head_tilt_right") if ht > 0 else t("posture.head_tilt_left")
             reasons.append(t("posture.head_tilt_fix", side=side, angle=f"{ht_abs:.1f}"))
+            problem_types.append("head_tilt")
 
     if hf is not None and hf > thresholds["neck"]:
         reasons.append(t("posture.head_forward", angle=f"{hf:.1f}"))
+        problem_types.append("neck")
 
     if tf is not None and tf > thresholds["torso"]:
         reasons.append(t("posture.torso_forward", angle=f"{tf:.1f}"))
+        problem_types.append("torso")
 
-    return len(reasons) > 0, details, reasons
+    return len(reasons) > 0, details, reasons, problem_types

@@ -26,7 +26,10 @@ def parse_args():
     p.add_argument("--torso-threshold", type=float, default=8.0, help="躯干前倾角阈值/度 (默认: 8)")
     p.add_argument("--sit-max-minutes", type=int, default=45, help="连续就坐多少分钟后提醒休息 (默认: 45)")
     p.add_argument("--sound", action="store_true", help="启用语音播报提醒")
-    p.add_argument("--tray", action="store_true", help="启用系统托盘模式")
+    p.add_argument("--tray", action="store_true",
+                   default=(sys.platform in ("darwin", "win32")),
+                   help="启用系统托盘模式 (macOS/Windows 默认开启)")
+    p.add_argument("--no-tray", action="store_true", help="禁用系统托盘，使用纯 CLI 模式")
     # 俯卧撑参数
     p.add_argument("--elbow-down", type=float, default=130, help="肘角低于此进入下降阶段/度 (默认: 130)")
     p.add_argument("--elbow-up", type=float, default=145, help="肘角高于此计为一次/度 (默认: 145)")
@@ -154,7 +157,7 @@ def _run_preview(args):
             # 显示肩膀可见度（方便调试离开检测）
             ls_vis = lm[mp_lib.tasks.vision.PoseLandmark.LEFT_SHOULDER].visibility
             rs_vis = lm[mp_lib.tasks.vision.PoseLandmark.RIGHT_SHOULDER].visibility
-            is_bad, details, reasons = evaluate_posture(lm, settings.thresholds)
+            is_bad, details, reasons, _ptypes = evaluate_posture(lm, settings.thresholds)
             draw_debug(frame, lm, is_bad, details)
             h = frame.shape[0]
             cv2.putText(frame, f"L_shoulder vis: {ls_vis:.2f}  R_shoulder vis: {rs_vis:.2f}",
@@ -177,6 +180,8 @@ def main():
     args = parse_args()
     if is_bundled():
         args.tray = True
+    if args.no_tray:
+        args.tray = False
 
     if args.mode == "posture":
         _run_posture(args)

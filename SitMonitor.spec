@@ -113,8 +113,8 @@ app = BUNDLE(
         "LSUIElement": True,                      # 不在 Dock 显示
         "CFBundleName": "SitMonitor",
         "CFBundleDisplayName": "Sit Monitor",
-        "CFBundleVersion": "1.1.0",
-        "CFBundleShortVersionString": "1.1.0",
+        "CFBundleVersion": "1.3.0",
+        "CFBundleShortVersionString": "1.3.0",
         "NSCameraUsageDescription": "Sit Monitor 需要摄像头来检测您的坐姿。",
         "NSMicrophoneUsageDescription": "Sit Monitor 需要检测通话状态以静音语音播报。",
         "NSHighResolutionCapable": True,

@@ -384,7 +384,7 @@ class PostureMonitor:
                         self.stats.sit_notifications_sent += 1
                         last_sit_notify_time = now
 
-                    is_bad, details, reasons = evaluate_posture(lm, thresholds)
+                    is_bad, details, reasons, problem_types = evaluate_posture(lm, thresholds)
 
                     # --- 疲劳检测 ---
                     fatigue_level = "normal"
@@ -487,6 +487,7 @@ class PostureMonitor:
                             "yawn_count": fatigue_tracker.yawn_count,
                         }
                     self._notify_state(state, details=details, reasons=reasons,
+                                       problems=problem_types,
                                        sit_minutes=sit_minutes, fatigue=fatigue_info,
                                        stance=current_stance)
 

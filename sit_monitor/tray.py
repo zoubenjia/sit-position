@@ -18,13 +18,20 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
 PROJECT_DIR = project_dir()
 
-# 图标路径
+# 动态图标生成
+try:
+    from sit_monitor.icon_gen import icon_path as _gen_icon_path
+    _HAS_ICON_GEN = True
+except ImportError:
+    _HAS_ICON_GEN = False
+
+# 静态图标路径（回退用）
 _ASSETS = assets_dir()
 _ICON_FILES = {
     "good": os.path.join(_ASSETS, "icon_good_color.png"),
@@ -38,7 +45,8 @@ _ICON_FILES = {
 
 class TrayApp(rumps.App):
     def __init__(self, settings: Settings, debug=False):
-        super().__init__("Sit Monitor", icon=_ICON_FILES["stopped"], quit_button=None)
+        _init_icon = _gen_icon_path("stopped") if _HAS_ICON_GEN else _ICON_FILES["stopped"]
+        super().__init__("Sit Monitor", icon=_init_icon, quit_button=None)
         self.settings = settings
         self.debug = debug
         self.monitor = None
@@ -278,8 +286,11 @@ class TrayApp(rumps.App):
 
     # --- 图标 ---
 
-    def _set_icon(self, state):
-        path = _ICON_FILES.get(state, _ICON_FILES["stopped"])
+    def _set_icon(self, state, problems=None):
+        if _HAS_ICON_GEN:
+            path = _gen_icon_path(state, problems or [])
+        else:
+            path = _ICON_FILES.get(state, _ICON_FILES["stopped"])
         if os.path.exists(path):
             self.icon = path
             self.title = None
@@ -297,7 +308,8 @@ class TrayApp(rumps.App):
         if not self._ui_dirty:
             return
         self._ui_dirty = False
-        self._set_icon(self._state)
+        problems = self._details.get("problems", [])
+        self._set_icon(self._state, problems)
         self._update_stats_menu()
         self._update_posture_hint(self._state, self._details)
 
