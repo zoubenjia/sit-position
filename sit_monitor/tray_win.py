@@ -284,10 +284,12 @@ class TrayApp:
         args = [python, "-m", "sit_monitor", exercise_id,
                 "--camera", str(self.settings.camera), "--debug"]
         self._exercise_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
+        self._update_icon("exercise")
 
         def wait_and_cleanup():
             self._exercise_proc.wait()
             self._exercise_proc = None
+            self._update_icon("stopped")
             from sit_monitor.platform_win import send_notification
             send_notification("Sit Monitor", "俯卧撑训练已完成")
             if resume_posture_after:
@@ -303,6 +305,7 @@ class TrayApp:
             except subprocess.TimeoutExpired:
                 self._exercise_proc.kill()
             self._exercise_proc = None
+            self._update_icon("stopped")
 
     # --- Snooze ---
 

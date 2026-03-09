@@ -441,11 +441,13 @@ class TrayApp(rumps.App):
                 "--camera", str(self.settings.camera), "--debug"]
         self._exercise_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
         sender.title = t("tray.menu.stop_pushup")
+        self._set_icon("exercise")
 
         def wait_and_cleanup():
             self._exercise_proc.wait()
             sender.title = t("tray.menu.pushup_training")
             self._exercise_proc = None
+            self._set_icon("stopped")
             rumps.notification("Sit Monitor", t("tray.notify.exercise_done_title"),
                                t("tray.notify.exercise_done_msg"))
             if resume_posture_after:
@@ -462,6 +464,7 @@ class TrayApp(rumps.App):
             except subprocess.TimeoutExpired:
                 self._exercise_proc.kill()
             self._exercise_proc = None
+            self._set_icon("stopped")
 
     # --- Preview ---
 

@@ -24,6 +24,7 @@ _GREEN = (76, 175, 80, 255)
 _ORANGE = (255, 152, 0, 255)
 _RED = (229, 57, 53, 255)
 _GRAY = (158, 158, 158, 255)
+_BLUE = (33, 150, 243, 255)        # 运动模式蓝色
 _HIGHLIGHT = (255, 255, 100, 220)  # 黄色高亮标记
 
 # 缓存
@@ -121,6 +122,46 @@ def _draw_figure(draw: ImageDraw.Draw, size: int,
         draw.line([pt(mx, my - 4), pt(mx - 2, my), pt(mx, my + 4)], fill=hi, width=thin)
 
 
+def _draw_pushup(draw: ImageDraw.Draw, size: int, color: Tuple[int, ...]):
+    """在 size×size 透明画布上绘制侧视俯卧撑人形。"""
+    s = size / 44.0
+    lw = max(2, round(3 * s))
+    thin = max(1, round(2 * s))
+
+    def pt(x, y):
+        return (round(x * s), round(y * s))
+
+    # ── 地面 ──
+    ground_y = 38.0
+    draw.line([pt(2, ground_y), pt(42, ground_y)], fill=(*color[:3], 60), width=thin)
+
+    # ── 人体（俯卧撑姿势，面朝左）──
+    head_cx, head_cy, head_r = 6.0, 19.0, 4.5   # 头部（左侧）
+    hand_x, hand_y = 10.0, ground_y              # 手掌撑地
+    sh_x, sh_y = 12.0, 22.0                      # 肩膀
+    hip_x, hip_y = 28.0, 24.0                    # 髋部
+    foot_x, foot_y = 40.0, ground_y              # 脚尖着地
+
+    # 手臂（手→肩）
+    draw.line([pt(hand_x, hand_y), pt(sh_x, sh_y)], fill=color, width=lw)
+    # 躯干（肩→髋）
+    draw.line([pt(sh_x, sh_y), pt(hip_x, hip_y)], fill=color, width=lw)
+    # 腿（髋→脚）
+    draw.line([pt(hip_x, hip_y), pt(foot_x, foot_y)], fill=color, width=lw)
+    # 颈部（肩→头）
+    draw.line([pt(sh_x, sh_y), pt(head_cx + head_r, head_cy)], fill=color, width=lw)
+    # 头部
+    draw.ellipse([pt(head_cx - head_r, head_cy - head_r),
+                  pt(head_cx + head_r, head_cy + head_r)], fill=color)
+
+    # ── 动感标记（上下箭头表示运动）──
+    hi = _HIGHLIGHT
+    mx = (sh_x + hip_x) / 2
+    draw.line([pt(mx, sh_y - 8), pt(mx, sh_y - 4)], fill=hi, width=thin)
+    draw.line([pt(mx - 2, sh_y - 6), pt(mx, sh_y - 8)], fill=hi, width=thin)
+    draw.line([pt(mx + 2, sh_y - 6), pt(mx, sh_y - 8)], fill=hi, width=thin)
+
+
 def generate(size: int, state: str = "good",
              problems: List[str] = None) -> Image.Image:
     """生成 RGBA 图标。"""
@@ -128,7 +169,9 @@ def generate(size: int, state: str = "good",
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
-    if state in ("away", "stopped", "camera_wait"):
+    if state == "exercise":
+        _draw_pushup(d, size, _BLUE)
+    elif state in ("away", "stopped", "camera_wait"):
         _draw_figure(d, size, [], _GRAY)
     elif state == "camera_adjust":
         _draw_figure(d, size, [], _ORANGE)
