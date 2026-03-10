@@ -51,26 +51,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: --- 下载模型文件 ---
+:: --- 下载模型文件（使用 certutil，Windows 自带，无需 Python） ---
 if exist pose_landmarker_lite.task (
     echo 姿势模型已存在，跳过下载
 ) else (
     echo 下载 MediaPipe Pose 模型（约 6MB）...
-    .venv\Scripts\python.exe -c "import urllib.request; urllib.request.urlretrieve('https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task', 'pose_landmarker_lite.task'); print('下载完成')"
+    certutil -urlcache -split -f "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task" pose_landmarker_lite.task >nul 2>&1
     if errorlevel 1 (
         echo [错误] 模型下载失败，请检查网络连接
         pause
         exit /b 1
     )
+    echo 下载完成
 )
 
 if exist face_landmarker.task (
     echo 人脸模型已存在，跳过下载
 ) else (
     echo 下载 MediaPipe Face 模型...
-    .venv\Scripts\python.exe -c "import urllib.request; urllib.request.urlretrieve('https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task', 'face_landmarker.task'); print('下载完成')"
+    certutil -urlcache -split -f "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task" face_landmarker.task >nul 2>&1
     if errorlevel 1 (
         echo [警告] 人脸模型下载失败，疲劳检测功能将不可用
+    ) else (
+        echo 下载完成
     )
 )
 

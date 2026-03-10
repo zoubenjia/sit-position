@@ -140,15 +140,23 @@ cd sit-position
 bash setup.sh    # One-click setup + auto-start + launch tray
 ```
 
-#### Windows
+#### Windows (PowerShell)
 
 ```powershell
 git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
-powershell -ExecutionPolicy Bypass -File setup.ps1    # One-click setup + auto-start + launch tray
+powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-> **PowerShell disabled?** Use the `.bat` alternative: `setup.bat`
+#### Windows (CMD — PowerShell disabled)
+
+```cmd
+git clone https://github.com/zoubenjia/sit-position.git
+cd sit-position
+setup.bat
+```
+
+> `.bat` scripts use only native Windows commands (`certutil` for downloads, `VBScript` for shortcuts) — no PowerShell required.
 
 ## Background Service
 
@@ -439,15 +447,23 @@ cd sit-position
 bash setup.sh    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
 
-#### Windows
+#### Windows (PowerShell)
 
 ```powershell
 git clone https://github.com/zoubenjia/sit-position.git
 cd sit-position
-powershell -ExecutionPolicy Bypass -File setup.ps1    # 一键搭建环境 + 安装自启动 + 启动托盘
+powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-> **PowerShell 被禁用？** 使用 `.bat` 替代方案：`setup.bat`
+#### Windows (CMD — PowerShell 被禁用时)
+
+```cmd
+git clone https://github.com/zoubenjia/sit-position.git
+cd sit-position
+setup.bat
+```
+
+> `.bat` 脚本仅使用 Windows 原生命令（`certutil` 下载文件、`VBScript` 创建快捷方式），无需 PowerShell。
 
 ## 后台服务
 
