@@ -8,6 +8,7 @@ import 'package:sit_position_mobile/services/stats_service.dart';
 import 'package:sit_position_mobile/screens/settings_screen.dart';
 import 'package:sit_position_mobile/screens/stats_screen.dart';
 import 'package:sit_position_mobile/screens/fatigue_screen.dart';
+import 'package:sit_position_mobile/screens/achievements_screen.dart';
 import 'package:sit_position_mobile/widgets/angle_gauge.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -118,6 +119,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _openAchievements() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AchievementsScreen(statsService: _statsService),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLyingDown = _currentOrientation == BodyOrientation.lyingDown;
@@ -133,6 +143,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: const Icon(Icons.face_retouching_natural),
             onPressed: _openFatigue,
             tooltip: '精准模式',
+          ),
+          IconButton(
+            icon: const Icon(Icons.emoji_events),
+            onPressed: _openAchievements,
+            tooltip: '成就',
           ),
           IconButton(
             icon: const Icon(Icons.bar_chart),
@@ -211,6 +226,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           '低头 ${_monitor.currentBadDuration.toStringAsFixed(0)}s / ${_settings.badDurationSeconds}s',
                           style: TextStyle(
                             color: Colors.red[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // 好姿势连续时间
+                if (_isMonitoring &&
+                    !isLyingDown &&
+                    _monitor.currentBadDuration == 0 &&
+                    _monitor.currentGoodStreakSeconds >= 60)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.emoji_events,
+                            color: Colors.green[600], size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '好姿势连续 ${_monitor.currentGoodStreakSeconds ~/ 60} 分钟',
+                          style: TextStyle(
+                            color: Colors.green[700],
                             fontWeight: FontWeight.w500,
                           ),
                         ),

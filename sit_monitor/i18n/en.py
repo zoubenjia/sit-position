@@ -4,12 +4,12 @@ STRINGS: dict[str, str] = {
     # ===== posture =====
     "posture.shoulder_left_high": "Left shoulder higher",
     "posture.shoulder_right_high": "Right shoulder higher",
-    "posture.shoulder_skew": "Shoulders uneven ({side}), straighten up ({angle}\u00b0)",
+    "posture.shoulder_skew": "Shoulders uneven ({side}), straighten up",
     "posture.head_tilt_right": "Head tilting right",
     "posture.head_tilt_left": "Head tilting left",
-    "posture.head_tilt_fix": "{side}, straighten your head ({angle}\u00b0)",
-    "posture.head_forward": "Head too far forward, tuck your chin ({angle}\u00b0)",
-    "posture.torso_forward": "Leaning forward, sit up straight ({angle}\u00b0)",
+    "posture.head_tilt_fix": "{side}, straighten your head",
+    "posture.head_forward": "Head too far forward, tuck your chin",
+    "posture.torso_forward": "Leaning forward, sit up straight",
 
     # ===== core =====
     "core.camera_wait": "\u23f3 Camera in use, waiting...",
@@ -44,6 +44,10 @@ STRINGS: dict[str, str] = {
     "core.bad_posture_status": "\u26a0 Bad posture {duration:.0f}s | Sitting {minutes:.0f}min | ",
     "core.bad_posture_status_standing": "\u26a0 Bad posture {duration:.0f}s | Standing {minutes:.0f}min | ",
     "core.good_posture_tts": "Good posture, keep it up",
+    "core.good_streak_15": "15 minutes of good posture, well done",
+    "core.good_streak_30": "30 minutes of good posture, awesome",
+    "core.good_streak_60": "One full hour of good posture, you're a pro",
+    "core.good_streak_120": "2 hours of good posture, iron will",
     "core.good_posture_status": "\u2713 Good posture | Sitting {minutes:.0f}min | ",
     "core.good_posture_status_standing": "\u2713 Good posture | Standing {minutes:.0f}min | ",
     "core.session_summary_title": "\ud83d\udcca Posture Monitoring Summary",
@@ -259,6 +263,12 @@ STRINGS: dict[str, str] = {
     "achievement.battle_winner.desc": "Win a push-up battle",
     "achievement.battle_streak_3.name": "3-Win Streak",
     "achievement.battle_streak_3.desc": "Win 3 push-up battles in a row",
+    "achievement.focus_30.name": "Focused 30",
+    "achievement.focus_30.desc": "Maintain good posture for 30 consecutive minutes",
+    "achievement.focus_60.name": "Hour Hero",
+    "achievement.focus_60.desc": "Maintain good posture for 60 consecutive minutes",
+    "achievement.focus_120.name": "Iron Will",
+    "achievement.focus_120.desc": "Maintain good posture for 120 consecutive minutes",
 
     # ===== report =====
     "report.no_daily_data": "No posture data for today",

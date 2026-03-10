@@ -15,7 +15,7 @@ from sit_monitor.cloud.achievements import (
 
 class TestAchievementDefinitions:
     def test_seven_achievements_defined(self):
-        assert len(ACHIEVEMENTS) == 10
+        assert len(ACHIEVEMENTS) == 13
 
     def test_all_have_required_fields(self):
         for a in ACHIEVEMENTS:
@@ -44,13 +44,13 @@ class TestAchievementEngine:
         with tempfile.TemporaryDirectory() as tmpdir:
             engine, _ = self._make_engine(tmpdir)
             assert engine.unlocked_count == 0
-            assert engine.total_count == 10
+            assert engine.total_count == 13
 
     def test_get_all_achievements(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             engine, _ = self._make_engine(tmpdir)
             achs = engine.get_all_achievements()
-            assert len(achs) == 10
+            assert len(achs) == 13
             assert all(not a["unlocked"] for a in achs)
 
     def test_manual_unlock(self):
@@ -166,6 +166,43 @@ class TestAchievementEngine:
                     newly = engine.check_and_unlock()
                     ids = [a.id for a in newly]
                     assert "early_bird" in ids
+
+    def test_focus_30_unlocks(self):
+        """单次连续好姿势 >= 30 分钟解锁 focus_30"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = os.path.join(tmpdir, "achievements.json")
+            with patch("sit_monitor.cloud.achievements.ACHIEVEMENTS_STATE_PATH", state_path):
+                engine = AchievementEngine()
+                events = [
+                    {"ts": datetime.now().isoformat(), "event": "start"},
+                    {"ts": datetime.now().isoformat(), "event": "stop",
+                     "good_minutes": 35, "bad_minutes": 5, "max_good_streak_minutes": 32.0},
+                ]
+                with patch("sit_monitor.cloud.achievements._read_events", return_value=events), \
+                     patch("sit_monitor.cloud.achievements.daily_summary", return_value=None):
+                    newly = engine.check_and_unlock()
+                    ids = [a.id for a in newly]
+                    assert "focus_30" in ids
+                    assert "focus_60" not in ids
+
+    def test_focus_60_and_30_unlock_together(self):
+        """单次连续好姿势 >= 60 分钟同时解锁 focus_30 和 focus_60"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = os.path.join(tmpdir, "achievements.json")
+            with patch("sit_monitor.cloud.achievements.ACHIEVEMENTS_STATE_PATH", state_path):
+                engine = AchievementEngine()
+                events = [
+                    {"ts": datetime.now().isoformat(), "event": "start"},
+                    {"ts": datetime.now().isoformat(), "event": "stop",
+                     "good_minutes": 65, "bad_minutes": 3, "max_good_streak_minutes": 62.0},
+                ]
+                with patch("sit_monitor.cloud.achievements._read_events", return_value=events), \
+                     patch("sit_monitor.cloud.achievements.daily_summary", return_value=None):
+                    newly = engine.check_and_unlock()
+                    ids = [a.id for a in newly]
+                    assert "focus_30" in ids
+                    assert "focus_60" in ids
+                    assert "focus_120" not in ids
 
     def test_no_unlock_when_conditions_not_met(self):
         """条件不满足时不解锁"""

@@ -16,6 +16,8 @@ class Stats:
         self.sit_notifications_sent = 0
         self.bad_seconds_total = 0.0
         self.good_seconds_total = 0.0
+        self.max_good_streak_seconds = 0.0  # 最大连续好姿势时长
+        self._good_streak_start = None  # 当前连续好姿势开始时间
         self._last_state = None  # "good" / "bad" / None
         self._last_state_time = None
 
@@ -37,8 +39,26 @@ class Stats:
             else:
                 self.bad_seconds_total += dt
 
+        # 追踪连续好姿势时长
+        if state == "good":
+            if self._good_streak_start is None:
+                self._good_streak_start = now
+        else:
+            if self._good_streak_start is not None:
+                streak = now - self._good_streak_start
+                if streak > self.max_good_streak_seconds:
+                    self.max_good_streak_seconds = streak
+                self._good_streak_start = None
+
         self._last_state = state
         self._last_state_time = now
+
+    @property
+    def current_good_streak_seconds(self):
+        """当前连续好姿势秒数（实时）"""
+        if self._good_streak_start is None:
+            return 0.0
+        return time.time() - self._good_streak_start
 
     def summary(self):
         """返回统计摘要字符串"""

@@ -5,7 +5,7 @@
 Real-time sitting/standing posture detection via camera, voice-guided push-up training. Supports macOS and Windows 10/11. Bilingual Chinese/English support.
 
 <p align="center">
-  <img src="docs/demo.gif" alt="Sit Monitor Demo" width="600">
+  <img src="docs/demo_en.gif" alt="Sit Monitor Demo" width="600">
 </p>
 
 ## Features
@@ -15,7 +15,7 @@ Real-time sitting/standing posture detection via camera, voice-guided push-up tr
 - **Dynamic Icons** — Tray icon reflects specific posture issues in real time: neck forward / head tilt / uneven shoulders / torso lean, each with distinct shape and color.
 - **Standing Desk Support** — Three modes: Auto-detect / Sitting / Standing, switchable from the tray menu.
 - **Pop-up Alerts** — Auto alert on sustained bad posture, with adjustable thresholds and duration.
-- **Positive Feedback** — Voice encouragement after posture correction: "Good posture, keep it up"
+- **Positive Feedback** — Voice encouragement after posture correction; milestone celebration at 15/30/60/120 minutes of sustained good posture
 - **Sedentary/Standing Reminders** — Alert after 45 minutes of continuous sitting or standing (adjustable).
 - **Auto-Pause on Leave** — Auto-pauses browser video when you leave the camera, resumes on return (Chrome/Safari/Arc/Firefox).
 - **Meeting Compatible** — Yields camera during video calls, reconnects after.
@@ -37,7 +37,7 @@ Real-time sitting/standing posture detection via camera, voice-guided push-up tr
 
 ### Leaderboard & Social (Cloud, Optional)
 - **Daily/Weekly Leaderboard** — Ranked by good posture rate
-- **Achievement System** — 10 badges (First Day, 3-Day Streak, Weekly Champion, Perfect Day, 100-Hour Pro, Social Butterfly, Early Bird, First Battle, Winner, 3-Win Streak)
+- **Achievement System** — 13 badges including Focus 30/60/120 (sustained good posture), streaks, battle wins, and more
 - **Likes** — Give likes to other users' daily reports
 - **Friend Challenges** — Challenge others on posture rate / monitoring duration
 - **Google Login** — Optional Google account linking for multi-device sync, unlinkable anytime
@@ -285,7 +285,7 @@ MIT
 用摄像头实时检测坐姿/站姿、语音引导俯卧撑训练。支持 macOS 和 Windows 10/11。支持中文/英文双语切换。
 
 <p align="center">
-  <img src="docs/demo.gif" alt="Sit Monitor Demo" width="600">
+  <img src="docs/demo_zh.gif" alt="Sit Monitor 演示" width="600">
 </p>
 
 ## 功能
@@ -295,7 +295,7 @@ MIT
 - **动态图标** — 托盘图标实时反映具体姿势问题：颈前倾/头侧倾/肩不平/躯干前倾各有不同变形和颜色
 - **站立办公支持** — 三种模式：自动检测 / 坐姿 / 站姿，托盘菜单一键切换
 - **弹窗提醒** — 持续坏姿势自动弹窗，可调阈值和时长
-- **正向反馈** — 纠正姿势后语音鼓励"坐姿很好，继续保持"
+- **正向反馈** — 纠正姿势后语音鼓励；连续保持好姿势 15/30/60/120 分钟时播报里程碑鼓励
 - **久坐/久站提醒** — 连续就坐或站立超过 45 分钟弹窗提醒活动休息（可调时长）
 - **离开暂停** — 人离开摄像头自动暂停浏览器视频，回来自动恢复（支持 Chrome/Safari/Arc/Firefox 等）
 - **会议兼容** — 视频会议占用摄像头时自动让出，结束后重连
@@ -317,7 +317,7 @@ MIT
 
 ### 排行榜 & 社交互动（云端，可选）
 - **日/周排行榜** — 按良好率排名，与其他用户比拼坐姿成绩
-- **成就系统** — 10 个徽章（初次打卡、三日连胜、周冠军、完美一天、百小时达人、社交蝴蝶、早起鸟儿、初次对战、胜利者、三连胜）
+- **成就系统** — 13 个徽章，含专注半小时/一小时达人/钢铁意志（连续好姿势）、连胜、对战等
 - **点赞鼓励** — 在排行榜上给其他用户的日报点赞
 - **好友挑战** — 向其他用户发起坐姿 PK（良好率 / 监控时长）
 - **Google 登录** — 可选绑定 Google 账号，多设备同步数据，随时解绑恢复匿名

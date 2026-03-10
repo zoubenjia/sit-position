@@ -4,12 +4,12 @@ STRINGS: dict[str, str] = {
     # ===== posture =====
     "posture.shoulder_left_high": "左肩高右肩低",
     "posture.shoulder_right_high": "右肩高左肩低",
-    "posture.shoulder_skew": "肩膀歪了（{side}），摆正肩膀 ({angle}°)",
+    "posture.shoulder_skew": "肩膀歪了（{side}），摆正肩膀",
     "posture.head_tilt_right": "头向右歪",
     "posture.head_tilt_left": "头向左歪",
-    "posture.head_tilt_fix": "{side}，摆正头部 ({angle}°)",
-    "posture.head_forward": "头太靠前，往后收下巴 ({angle}°)",
-    "posture.torso_forward": "身体前倾，坐直挺胸 ({angle}°)",
+    "posture.head_tilt_fix": "{side}，摆正头部",
+    "posture.head_forward": "头太靠前，往后收下巴",
+    "posture.torso_forward": "身体前倾，坐直挺胸",
 
     # ===== core =====
     "core.camera_wait": "⏳ 摄像头被占用，等待释放...",
@@ -44,6 +44,10 @@ STRINGS: dict[str, str] = {
     "core.bad_posture_status": "⚠ 坏姿势 {duration:.0f}s | 就坐 {minutes:.0f}min | ",
     "core.bad_posture_status_standing": "⚠ 坏姿势 {duration:.0f}s | 站立 {minutes:.0f}min | ",
     "core.good_posture_tts": "坐姿很好，继续保持",
+    "core.good_streak_15": "已连续保持好姿势十五分钟，做得好",
+    "core.good_streak_30": "连续三十分钟好姿势，太棒了",
+    "core.good_streak_60": "整整一小时好姿势，你是坐姿达人",
+    "core.good_streak_120": "连续两小时好姿势，钢铁意志",
     "core.good_posture_status": "✓ 姿势良好 | 就坐 {minutes:.0f}min | ",
     "core.good_posture_status_standing": "✓ 姿势良好 | 站立 {minutes:.0f}min | ",
     "core.session_summary_title": "📊 本次坐姿监控统计",
@@ -259,6 +263,12 @@ STRINGS: dict[str, str] = {
     "achievement.battle_winner.desc": "赢得一场俯卧撑对战",
     "achievement.battle_streak_3.name": "三连胜",
     "achievement.battle_streak_3.desc": "连续赢得 3 场俯卧撑对战",
+    "achievement.focus_30.name": "专注半小时",
+    "achievement.focus_30.desc": "单次连续保持良好姿势 30 分钟",
+    "achievement.focus_60.name": "一小时达人",
+    "achievement.focus_60.desc": "单次连续保持良好姿势 60 分钟",
+    "achievement.focus_120.name": "钢铁意志",
+    "achievement.focus_120.desc": "单次连续保持良好姿势 120 分钟",
 
     # ===== report =====
     "report.no_daily_data": "今日暂无坐姿数据",

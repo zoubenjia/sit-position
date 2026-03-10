@@ -167,6 +167,7 @@ class PostureMonitor:
 
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
+        good_streak_milestones = set()  # 已播报的好姿势里程碑（分钟）
         present_streak = 0  # 连续 person_present 帧计数，用于媒体恢复防抖
         last_notify_time = 0
         _say_proc = None  # 跟踪当前 say 进程，用于离开时停止语音
@@ -434,6 +435,7 @@ class PostureMonitor:
 
                     if is_bad:
                         good_streak = 0
+                        good_streak_milestones.clear()
                         if bad_start_time is None:
                             bad_start_time = now
                         bad_duration = now - bad_start_time
@@ -470,6 +472,19 @@ class PostureMonitor:
                                 if not (s.call_mute and is_in_call()):
                                     speak(t("core.good_posture_tts"))
                             bad_start_time = None
+
+                        # 连续好姿势里程碑鼓励
+                        if s.sound and not snoozed:
+                            streak_min = self.stats.current_good_streak_seconds / 60
+                            _MILESTONES = {15: "core.good_streak_15", 30: "core.good_streak_30",
+                                           60: "core.good_streak_60", 120: "core.good_streak_120"}
+                            for mins, key in _MILESTONES.items():
+                                if streak_min >= mins and mins not in good_streak_milestones:
+                                    good_streak_milestones.add(mins)
+                                    if not (s.call_mute and is_in_call()):
+                                        speak(t(key))
+                                    log_event(self.logger, "good_streak_milestone", minutes=mins)
+
                         good_status_key = "core.good_posture_status_standing" if current_stance == "standing" else "core.good_posture_status"
                         status_line = (
                             t(good_status_key, minutes=sit_minutes)
@@ -511,6 +526,7 @@ class PostureMonitor:
                       bad_count=self.stats.bad_count,
                       good_minutes=round(self.stats.good_seconds_total / 60, 1),
                       bad_minutes=round(self.stats.bad_seconds_total / 60, 1),
+                      max_good_streak_minutes=round(self.stats.max_good_streak_seconds / 60, 1),
                       notifications=self.stats.notifications_sent,
                       sit_notifications=self.stats.sit_notifications_sent)
 

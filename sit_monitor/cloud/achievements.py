@@ -98,6 +98,30 @@ ACHIEVEMENTS = [
         condition_type="streak",
         condition_value=3,
     ),
+    Achievement(
+        id="focus_30",
+        name="achievement.focus_30.name",
+        description="achievement.focus_30.desc",
+        icon="🎯",
+        condition_type="cumulative",
+        condition_value=30,
+    ),
+    Achievement(
+        id="focus_60",
+        name="achievement.focus_60.name",
+        description="achievement.focus_60.desc",
+        icon="💪",
+        condition_type="cumulative",
+        condition_value=60,
+    ),
+    Achievement(
+        id="focus_120",
+        name="achievement.focus_120.name",
+        description="achievement.focus_120.desc",
+        icon="🏅",
+        condition_type="cumulative",
+        condition_value=120,
+    ),
 ]
 
 ACHIEVEMENTS_MAP = {a.id: a for a in ACHIEVEMENTS}
@@ -178,6 +202,8 @@ class AchievementEngine:
                 unlocked = self._check_cumulative_minutes(6000)
             elif ach.id == "early_bird":
                 unlocked = self._check_early_bird(7)
+            elif ach.id in ("focus_30", "focus_60", "focus_120"):
+                unlocked = self._check_good_streak(ach.condition_value)
             # first_like 由外部手动触发，不在此检查
 
             if unlocked:
@@ -232,6 +258,12 @@ class AchievementEngine:
             for e in stops
         )
         return total >= target
+
+    def _check_good_streak(self, target_minutes: float) -> bool:
+        """单次连续好姿势达到目标分钟数"""
+        events = _read_events(days=365)
+        stops = [e for e in events if e.get("event") == "stop"]
+        return any(e.get("max_good_streak_minutes", 0) >= target_minutes for e in stops)
 
     def _check_early_bird(self, hour: int) -> bool:
         """在指定小时前开始监控"""
