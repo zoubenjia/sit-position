@@ -1,0 +1,104 @@
+name: Build Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download ML models
+        run: |
+          curl -sLO https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+          curl -sLO https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+
+      - name: Build macOS app
+        run: python -m PyInstaller SitMonitor.spec --noconfirm
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "SitMonitor" \
+            -srcfolder dist/SitMonitor.app \
+            -ov -format UDZO \
+            dist/SitMonitor-macOS.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SitMonitor-macOS
+          path: dist/SitMonitor-macOS.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Download ML models
+        run: |
+          Invoke-WebRequest -Uri "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task" -OutFile "pose_landmarker_lite.task"
+          Invoke-WebRequest -Uri "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task" -OutFile "face_landmarker.task"
+
+      - name: Generate .ico icon
+        run: |
+          python -c "
+          from PIL import Image; import os
+          src = 'build-resources/SitMonitor.png'
+          dst = 'build-resources/SitMonitor.ico'
+          if os.path.exists(src) and not os.path.exists(dst):
+              img = Image.open(src)
+              img.save(dst, format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          "
+        continue-on-error: true
+
+      - name: Build Windows exe
+        run: python -m PyInstaller SitMonitor_win.spec --noconfirm
+
+      - name: Create zip
+        run: Compress-Archive -Path dist\SitMonitor -DestinationPath dist\SitMonitor-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SitMonitor-Windows
+          path: dist/SitMonitor-Windows.zip
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/SitMonitor-macOS/SitMonitor-macOS.dmg
+            artifacts/SitMonitor-Windows/SitMonitor-Windows.zip
+          generate_release_notes: true

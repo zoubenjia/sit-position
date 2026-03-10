@@ -98,9 +98,12 @@ System prompts for camera permission on first run. Click "Allow".
 
 ## Installation
 
-### Option 1: DMG Install (macOS, Easiest)
+### Option 1: Download Binary (Easiest)
 
-Download `SitMonitor.dmg` from [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest), open and drag to Applications. Apple code-signed + notarized, Gatekeeper won't block.
+Download from [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest):
+
+- **macOS**: `SitMonitor-macOS.dmg` — Open and drag to Applications. Apple code-signed + notarized, Gatekeeper won't block.
+- **Windows**: `SitMonitor-Windows.zip` — Extract and run `SitMonitor.exe`. No Python installation required.
 
 ### Option 2: Homebrew (Recommended, macOS)
 
@@ -145,6 +148,8 @@ cd sit-position
 powershell -ExecutionPolicy Bypass -File setup.ps1    # One-click setup + auto-start + launch tray
 ```
 
+> **PowerShell disabled?** Use the `.bat` alternative: `setup.bat`
+
 ## Background Service
 
 ### macOS
@@ -158,7 +163,7 @@ bash service.sh update    # Update from remote
 bash service.sh log       # View logs
 ```
 
-### Windows
+### Windows (PowerShell)
 
 ```powershell
 .\service.ps1 install     # Install auto-start + start
@@ -169,6 +174,19 @@ bash service.sh log       # View logs
 .\service.ps1 update      # Update from remote
 .\service.ps1 log         # View logs
 .\service.ps1 uninstall   # Uninstall auto-start
+```
+
+### Windows (CMD — PowerShell disabled)
+
+```cmd
+service.bat install       & REM Install auto-start + start
+service.bat start         & REM Start
+service.bat stop          & REM Stop
+service.bat restart       & REM Restart
+service.bat status        & REM Check status
+service.bat update        & REM Update from remote
+service.bat log           & REM View logs
+service.bat uninstall     & REM Uninstall auto-start
 ```
 
 ## Parameters
@@ -252,7 +270,8 @@ A: Run `bash service.sh status` to check, `bash service.sh start` to manually st
 - Windows: pystray tray + winotify notifications + pyttsx3 TTS
 - Cloud: Supabase (PostgreSQL + Auth + REST API) + httpx
 - Icons: Pillow dynamic posture indicator icons
-- Packaging: PyInstaller (macOS .app) + Homebrew Formula + Apple notarization
+- Packaging: PyInstaller (macOS .app / Windows .exe) + Homebrew Formula + Apple notarization
+- CI/CD: GitHub Actions cross-platform build + auto-release
 
 ## Version History
 
@@ -378,9 +397,12 @@ MIT
 
 ## 安装
 
-### 方式一：DMG 安装（macOS，最简单）
+### 方式一：下载二进制（最简单）
 
-从 [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest) 下载 `SitMonitor.dmg`，打开后拖入 Applications 即可。已通过 Apple 代码签名 + 公证，macOS Gatekeeper 不会拦截。
+从 [GitHub Releases](https://github.com/zoubenjia/sit-position/releases/latest) 下载：
+
+- **macOS**：`SitMonitor-macOS.dmg` — 打开后拖入 Applications 即可。已通过 Apple 代码签名 + 公证，Gatekeeper 不会拦截。
+- **Windows**：`SitMonitor-Windows.zip` — 解压后运行 `SitMonitor.exe`，无需安装 Python。
 
 ### 方式二：Homebrew（推荐，macOS）
 
@@ -425,6 +447,8 @@ cd sit-position
 powershell -ExecutionPolicy Bypass -File setup.ps1    # 一键搭建环境 + 安装自启动 + 启动托盘
 ```
 
+> **PowerShell 被禁用？** 使用 `.bat` 替代方案：`setup.bat`
+
 ## 后台服务
 
 ### macOS
@@ -438,7 +462,7 @@ bash service.sh update    # 从远程仓库更新
 bash service.sh log       # 查看日志
 ```
 
-### Windows
+### Windows (PowerShell)
 
 ```powershell
 .\service.ps1 install     # 安装自启动 + 启动
@@ -449,6 +473,19 @@ bash service.sh log       # 查看日志
 .\service.ps1 update      # 从远程仓库更新
 .\service.ps1 log         # 查看日志
 .\service.ps1 uninstall   # 卸载自启动
+```
+
+### Windows (CMD — PowerShell 被禁用时)
+
+```cmd
+service.bat install       & REM 安装自启动 + 启动
+service.bat start         & REM 启动
+service.bat stop          & REM 停止
+service.bat restart       & REM 重启
+service.bat status        & REM 查看状态
+service.bat update        & REM 从远程仓库更新
+service.bat log           & REM 查看日志
+service.bat uninstall     & REM 卸载自启动
 ```
 
 ## 参数
@@ -532,7 +569,8 @@ A: 运行 `bash service.sh status` 查看状态，`bash service.sh start` 手动
 - Windows: pystray 托盘 + winotify 通知 + pyttsx3 TTS
 - 云端: Supabase (PostgreSQL + Auth + REST API) + httpx
 - 图标: Pillow 动态生成姿势指示图标
-- 打包: PyInstaller (macOS .app) + Homebrew Formula + Apple 公证
+- 打包: PyInstaller (macOS .app / Windows .exe) + Homebrew Formula + Apple 公证
+- CI/CD: GitHub Actions 跨平台构建 + 自动发布
 
 ## 版本历史
 
