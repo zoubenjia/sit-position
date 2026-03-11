@@ -1,16 +1,53 @@
-name: Build Release Binaries
+name: Build & Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version from pyproject.toml
+        id: ver
+        run: |
+          VERSION=$(python3 -c "
+          import re
+          with open('pyproject.toml') as f:
+              m = re.search(r'version\s*=\s*\"([^\"]+)\"', f.read())
+              print(m.group(1))
+          ")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if tag already exists
+        id: check
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "::notice::Tag $TAG already exists, skipping release"
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "::notice::New version $TAG, will build and release"
+          fi
+
   build-macos:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +82,8 @@ jobs:
           path: dist/SitMonitor-macOS.dmg
 
   build-windows:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,18 +126,29 @@ jobs:
           path: dist/SitMonitor-Windows.zip
 
   release:
-    needs: [build-macos, build-windows]
+    needs: [check-version, build-macos, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/SitMonitor-macOS/SitMonitor-macOS.dmg
-            artifacts/SitMonitor-Windows/SitMonitor-Windows.zip
-          generate_release_notes: true
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ needs.check-version.outputs.tag }}"
+          VERSION="${{ needs.check-version.outputs.version }}"
+
+          # 创建并推送 tag
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          # 创建 GitHub Release
+          gh release create "$TAG" \
+            artifacts/SitMonitor-macOS/SitMonitor-macOS.dmg \
+            artifacts/SitMonitor-Windows/SitMonitor-Windows.zip \
+            --title "SitMonitor $TAG" \
+            --generate-notes

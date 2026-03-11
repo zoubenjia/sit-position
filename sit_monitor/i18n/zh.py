@@ -141,6 +141,8 @@ STRINGS: dict[str, str] = {
     "tray.notify.achievement_unlocked": "🎉 成就解锁: {icon} {name}",
     "tray.notify.update_available": "有新版本可用",
     "tray.notify.update_available_msg": "{log}\n点击菜单「检查更新」升级",
+    "tray.notify.update_new_version": "新版本 {version} 可用，点击「检查更新」自动升级",
+    "tray.notify.downloading_update": "正在下载更新...",
     "tray.notify.up_to_date": "已是最新版本",
     "tray.notify.update_done": "更新完成，正在重启...",
     "tray.notify.update_failed": "更新失败",

@@ -141,6 +141,8 @@ STRINGS: dict[str, str] = {
     "tray.notify.achievement_unlocked": "\ud83c\udf89 Achievement unlocked: {icon} {name}",
     "tray.notify.update_available": "New version available",
     "tray.notify.update_available_msg": "{log}\nGo to Check for Updates to upgrade",
+    "tray.notify.update_new_version": "Version {version} available. Click Check for Updates to upgrade.",
+    "tray.notify.downloading_update": "Downloading update...",
     "tray.notify.up_to_date": "Already up to date",
     "tray.notify.update_done": "Update complete, restarting...",
     "tray.notify.update_failed": "Update failed",

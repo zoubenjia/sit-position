@@ -906,31 +906,82 @@ class TrayApp(rumps.App):
     def _silent_check_update(self):
         """静默检查更新，有新版本时通知用户"""
         if is_bundled():
-            return
-        try:
-            subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
-                           capture_output=True, timeout=15)
-            local = subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_DIR,
-                                   capture_output=True, text=True).stdout.strip()
-            remote = subprocess.run(["git", "rev-parse", "origin/main"], cwd=PROJECT_DIR,
-                                    capture_output=True, text=True).stdout.strip()
-            if local != remote:
-                git_log = subprocess.run(
-                    ["git", "log", f"{local}..{remote}", "--oneline"],
-                    cwd=PROJECT_DIR, capture_output=True, text=True,
-                ).stdout.strip()
-                rumps.notification("Sit Monitor", t("tray.notify.update_available"),
-                                   t("tray.notify.update_available_msg", log=git_log))
-        except Exception:
-            pass
+            try:
+                from sit_monitor.updater import check_for_update
+                has_update, tag, _ = check_for_update(VERSION)
+                if has_update:
+                    rumps.notification("Sit Monitor", t("tray.notify.update_available"),
+                                       t("tray.notify.update_new_version", version=tag))
+            except Exception:
+                pass
+        else:
+            try:
+                subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
+                               capture_output=True, timeout=15)
+                local = subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_DIR,
+                                       capture_output=True, text=True).stdout.strip()
+                remote = subprocess.run(["git", "rev-parse", "origin/main"], cwd=PROJECT_DIR,
+                                        capture_output=True, text=True).stdout.strip()
+                if local != remote:
+                    git_log = subprocess.run(
+                        ["git", "log", f"{local}..{remote}", "--oneline"],
+                        cwd=PROJECT_DIR, capture_output=True, text=True,
+                    ).stdout.strip()
+                    rumps.notification("Sit Monitor", t("tray.notify.update_available"),
+                                       t("tray.notify.update_available_msg", log=git_log))
+            except Exception:
+                pass
 
     # --- Update ---
 
     def _check_update(self, _):
         if is_bundled():
-            rumps.notification("Sit Monitor", t("tray.menu.check_updates"),
-                               "App 版本请从 GitHub Releases 下载更新")
-            return
+            self._check_update_bundled()
+        else:
+            self._check_update_git()
+
+    def _check_update_bundled(self):
+        """打包模式：通过 GitHub Releases 自动下载并替换更新"""
+        def do_update():
+            try:
+                from sit_monitor.updater import (
+                    check_for_update, get_dmg_url, download_update, install_and_restart,
+                )
+                has_update, tag, release = check_for_update(VERSION)
+                if not has_update:
+                    rumps.notification("Sit Monitor", t("tray.menu.check_updates"),
+                                       t("tray.notify.up_to_date"))
+                    return
+
+                url = get_dmg_url(release)
+                if not url:
+                    rumps.notification("Sit Monitor", t("tray.notify.update_failed"),
+                                       "No DMG found in release")
+                    return
+
+                rumps.notification("Sit Monitor", t("tray.notify.downloading_update"),
+                                   tag)
+
+                dmg_path = download_update(url)
+
+                rumps.notification("Sit Monitor", t("tray.notify.update_done"), tag)
+
+                if install_and_restart(dmg_path):
+                    self._stop_preview()
+                    self._stop_exercise()
+                    self._stop_monitor()
+                    self._stop_cloud()
+                    rumps.quit_application()
+                else:
+                    rumps.notification("Sit Monitor", t("tray.notify.update_failed"),
+                                       "Cannot determine app path")
+            except Exception as e:
+                rumps.notification("Sit Monitor", t("tray.notify.update_failed"), str(e))
+
+        threading.Thread(target=do_update, daemon=True).start()
+
+    def _check_update_git(self):
+        """源码模式：通过 git pull 更新"""
         def do_update():
             try:
                 subprocess.run(["git", "fetch", "origin"], cwd=PROJECT_DIR,
