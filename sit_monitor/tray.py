@@ -18,7 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
