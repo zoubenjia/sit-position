@@ -23,7 +23,7 @@ STRINGS: dict[str, str] = {
     "core.fatigue_alert_title": "疲劳提醒",
     "core.posture_alert_title": "坐姿提醒",
     "core.posture_alert_title_standing": "站姿提醒",
-    "core.posture_alert_msg": "请纠正姿势：{msg}",
+    "core.posture_alert_msg": "{msg}",
     "core.sit_reminder_suffix": "\n（已连续就坐 {minutes:.0f} 分钟，建议起来活动、喝杯水）",
     "core.stand_reminder_suffix": "\n（已连续站立 {minutes:.0f} 分钟，建议坐下休息一会儿）",
     "core.media_paused": "⏸ 已暂停播放（离开 {seconds:.0f}s）",
@@ -113,7 +113,7 @@ STRINGS: dict[str, str] = {
     # ===== tray - posture hint =====
     "tray.hint.good": "✓ 姿势良好",
     "tray.hint.good_standing": "✓ 站姿良好",
-    "tray.hint.bad_default": "⚠ 请纠正姿势",
+    "tray.hint.bad_default": "⚠ 姿势不良",
     "tray.hint.away": "— 人不在",
     "tray.hint.camera_adjust": "📷 摄像头角度不对，请调整",
     "tray.hint.camera_adjust_direction": "📷 请{direction}",

@@ -23,7 +23,7 @@ STRINGS: dict[str, str] = {
     "core.fatigue_alert_title": "Fatigue Alert",
     "core.posture_alert_title": "Posture Alert",
     "core.posture_alert_title_standing": "Standing Posture Alert",
-    "core.posture_alert_msg": "Please correct your posture: {msg}",
+    "core.posture_alert_msg": "{msg}",
     "core.sit_reminder_suffix": "\n(Sitting for {minutes:.0f} min. Time to get up and move!)",
     "core.stand_reminder_suffix": "\n(Standing for {minutes:.0f} min. Time to sit down and rest!)",
     "core.media_paused": "\u23f8 Media paused (away {seconds:.0f}s)",
@@ -113,7 +113,7 @@ STRINGS: dict[str, str] = {
     # ===== tray - posture hint =====
     "tray.hint.good": "\u2713 Good Posture",
     "tray.hint.good_standing": "\u2713 Good Standing Posture",
-    "tray.hint.bad_default": "\u26a0 Please correct posture",
+    "tray.hint.bad_default": "\u26a0 Bad Posture",
     "tray.hint.away": "\u2014 Away",
     "tray.hint.camera_adjust": "\U0001f4f7 Camera angle off, please adjust",
     "tray.hint.camera_adjust_direction": "\U0001f4f7 Please {direction}",
