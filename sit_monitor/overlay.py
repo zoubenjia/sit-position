@@ -83,7 +83,15 @@ def _run_overlay_macos(camera_idx: int):
 
     # Shared state
     _lock = threading.Lock()
-    _state = {"landmarks": None, "is_bad": False, "running": True}
+    _state = {"landmarks": None, "is_bad": False, "problems": [], "running": True}
+
+    # Landmark indices for reference lines
+    _LS = mp_lib.tasks.vision.PoseLandmark.LEFT_SHOULDER
+    _RS = mp_lib.tasks.vision.PoseLandmark.RIGHT_SHOULDER
+    _LE = mp_lib.tasks.vision.PoseLandmark.LEFT_EAR
+    _RE = mp_lib.tasks.vision.PoseLandmark.RIGHT_EAR
+    _LH = mp_lib.tasks.vision.PoseLandmark.LEFT_HIP
+    _RH = mp_lib.tasks.vision.PoseLandmark.RIGHT_HIP
 
     class SkeletonView(NSView):
         def drawRect_(self, dirty_rect):
@@ -93,6 +101,7 @@ def _run_overlay_macos(camera_idx: int):
             with _lock:
                 lm = _state["landmarks"]
                 is_bad = _state["is_bad"]
+                problems = list(_state["problems"])
 
             if lm is None:
                 return
@@ -100,8 +109,68 @@ def _run_overlay_macos(camera_idx: int):
             vw = self.bounds().size.width
             vh = self.bounds().size.height
             color = NSColor.redColor() if is_bad else NSColor.greenColor()
-            color.set()
 
+            # --- Reference guide lines (drawn first, behind skeleton) ---
+            ref_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                1, 1, 1, 0.25)  # faint white
+
+            ls = lm[_LS]
+            rs = lm[_RS]
+            le = lm[_LE]
+            re = lm[_RE]
+            lh = lm[_LH]
+            rh = lm[_RH]
+
+            # 1) Shoulder level guide — horizontal line at avg shoulder height
+            if ls.visibility >= 0.5 and rs.visibility >= 0.5:
+                avg_sy = (1 - (ls.y + rs.y) / 2) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "shoulder" in problems else ref_color)
+                self._draw_hline(guide_color, avg_sy, vw)
+
+            # 2) Ear level guide — horizontal line at avg ear height
+            if le.visibility >= 0.5 and re.visibility >= 0.5:
+                avg_ey = (1 - (le.y + re.y) / 2) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "head_tilt" in problems else ref_color)
+                self._draw_hline(guide_color, avg_ey, vw)
+
+            # 3) Neck vertical guide — plumb line from ear down to shoulder
+            #    Shows ideal: ear should be directly above shoulder
+            if le.visibility >= 0.5 and ls.visibility >= 0.5:
+                sx = ls.x * vw
+                sy_top = (1 - le.y) * vh
+                sy_bot = (1 - ls.y) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "neck" in problems else ref_color)
+                self._draw_vline(guide_color, sx, sy_bot, sy_top)
+            if re.visibility >= 0.5 and rs.visibility >= 0.5:
+                sx = rs.x * vw
+                sy_top = (1 - re.y) * vh
+                sy_bot = (1 - rs.y) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "neck" in problems else ref_color)
+                self._draw_vline(guide_color, sx, sy_bot, sy_top)
+
+            # 4) Torso vertical guide — plumb line from shoulder down to hip
+            #    Shows ideal: shoulder should be directly above hip
+            if ls.visibility >= 0.5 and lh.visibility >= 0.5:
+                hx = lh.x * vw
+                sy_top = (1 - ls.y) * vh
+                sy_bot = (1 - lh.y) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "torso" in problems else ref_color)
+                self._draw_vline(guide_color, hx, sy_bot, sy_top)
+            if rs.visibility >= 0.5 and rh.visibility >= 0.5:
+                hx = rh.x * vw
+                sy_top = (1 - rs.y) * vh
+                sy_bot = (1 - rh.y) * vh
+                guide_color = (NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    1, 0.5, 0, 0.6) if "torso" in problems else ref_color)
+                self._draw_vline(guide_color, hx, sy_bot, sy_top)
+
+            # --- Skeleton lines ---
+            color.set()
             for conn in _CONNECTIONS:
                 s = lm[conn.start]
                 e = lm[conn.end]
@@ -119,6 +188,26 @@ def _run_overlay_macos(camera_idx: int):
                     NSBezierPath.bezierPathWithOvalInRect_(
                         NSMakeRect(px - 3, py - 3, 6, 6)
                     ).fill()
+
+        def _draw_hline(self, color, y, width):
+            """Draw a dashed horizontal reference line."""
+            color.set()
+            path = NSBezierPath.bezierPath()
+            path.setLineWidth_(1.0)
+            path.setLineDash_count_phase_([4, 4], 2, 0)
+            path.moveToPoint_(NSMakePoint(0, y))
+            path.lineToPoint_(NSMakePoint(width, y))
+            path.stroke()
+
+        def _draw_vline(self, color, x, y_from, y_to):
+            """Draw a dashed vertical reference line."""
+            color.set()
+            path = NSBezierPath.bezierPath()
+            path.setLineWidth_(1.0)
+            path.setLineDash_count_phase_([4, 4], 2, 0)
+            path.moveToPoint_(NSMakePoint(x, y_from))
+            path.lineToPoint_(NSMakePoint(x, y_to))
+            path.stroke()
 
     view = SkeletonView.alloc().initWithFrame_(NSMakeRect(0, 0, WIN_W, WIN_H))
     window.setContentView_(view)
@@ -142,11 +231,13 @@ def _run_overlay_macos(camera_idx: int):
                 with _lock:
                     if results.pose_landmarks:
                         lm = results.pose_landmarks[0]
-                        is_bad, _, _, _ = evaluate_posture(lm, settings.thresholds)
+                        is_bad, _, _, ptypes = evaluate_posture(lm, settings.thresholds)
                         _state["landmarks"] = lm
                         _state["is_bad"] = is_bad
+                        _state["problems"] = ptypes
                     else:
                         _state["landmarks"] = None
+                        _state["problems"] = []
                 time.sleep(0.03)
         finally:
             landmarker.close()
@@ -229,8 +320,44 @@ def _run_overlay_cv(camera_idx: int):
 
             if results.pose_landmarks:
                 lm = results.pose_landmarks[0]
-                is_bad, details, reasons, _ptypes = evaluate_posture(lm, settings.thresholds)
+                is_bad, details, reasons, ptypes = evaluate_posture(lm, settings.thresholds)
                 color = (0, 0, 255) if is_bad else (0, 255, 0)
+                ref_normal = (60, 60, 60)  # faint grey
+                ref_warn = (0, 140, 255)   # orange (BGR)
+
+                _ls = lm[mp_lib.tasks.vision.PoseLandmark.LEFT_SHOULDER]
+                _rs = lm[mp_lib.tasks.vision.PoseLandmark.RIGHT_SHOULDER]
+                _le = lm[mp_lib.tasks.vision.PoseLandmark.LEFT_EAR]
+                _re = lm[mp_lib.tasks.vision.PoseLandmark.RIGHT_EAR]
+                _lh = lm[mp_lib.tasks.vision.PoseLandmark.LEFT_HIP]
+                _rh = lm[mp_lib.tasks.vision.PoseLandmark.RIGHT_HIP]
+
+                # Reference: shoulder level
+                if _ls.visibility >= 0.5 and _rs.visibility >= 0.5:
+                    sy = int((_ls.y + _rs.y) / 2 * h)
+                    rc = ref_warn if "shoulder" in ptypes else ref_normal
+                    cv2.line(canvas, (0, sy), (w, sy), rc, 1, cv2.LINE_AA)
+                # Reference: ear level
+                if _le.visibility >= 0.5 and _re.visibility >= 0.5:
+                    ey = int((_le.y + _re.y) / 2 * h)
+                    rc = ref_warn if "head_tilt" in ptypes else ref_normal
+                    cv2.line(canvas, (0, ey), (w, ey), rc, 1, cv2.LINE_AA)
+                # Reference: neck vertical (shoulder x → up to ear)
+                for ear, shoulder, tag in [(_le, _ls, "neck"), (_re, _rs, "neck")]:
+                    if ear.visibility >= 0.5 and shoulder.visibility >= 0.5:
+                        sx = int(shoulder.x * w)
+                        rc = ref_warn if tag in ptypes else ref_normal
+                        cv2.line(canvas, (sx, int(shoulder.y * h)),
+                                 (sx, int(ear.y * h)), rc, 1, cv2.LINE_AA)
+                # Reference: torso vertical (hip x → up to shoulder)
+                for shoulder, hip, tag in [(_ls, _lh, "torso"), (_rs, _rh, "torso")]:
+                    if shoulder.visibility >= 0.5 and hip.visibility >= 0.5:
+                        hx = int(hip.x * w)
+                        rc = ref_warn if tag in ptypes else ref_normal
+                        cv2.line(canvas, (hx, int(hip.y * h)),
+                                 (hx, int(shoulder.y * h)), rc, 1, cv2.LINE_AA)
+
+                # Skeleton
                 for conn in _CONNECTIONS:
                     s = lm[conn.start]
                     e = lm[conn.end]
