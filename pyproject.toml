@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sit-monitor"
-version = "1.4.0"
+version = "1.5.0"
 description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
 readme = "README.md"
 requires-python = ">=3.11"
