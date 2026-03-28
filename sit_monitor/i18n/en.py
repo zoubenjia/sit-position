@@ -147,6 +147,7 @@ STRINGS: dict[str, str] = {
     "tray.notify.update_new_version": "Version {version} available. Click Check for Updates to upgrade.",
     "tray.notify.downloading_update": "Downloading update...",
     "tray.notify.up_to_date": "Already up to date",
+    "tray.notify.restart_needed": "Code updated ({old} → {new}), restarting...",
     "tray.notify.update_done": "Update complete, restarting...",
     "tray.notify.update_failed": "Update failed",
     "tray.notify.battle_created": "\u2694\ufe0f Battle Created",

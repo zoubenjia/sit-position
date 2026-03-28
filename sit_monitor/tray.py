@@ -1033,6 +1033,13 @@ class TrayApp(rumps.App):
                                         capture_output=True, text=True).stdout.strip()
 
                 if local == remote:
+                    # 代码已最新，但运行中的进程可能是旧版本，检查是否需要重启
+                    disk_version = self._read_disk_version()
+                    if disk_version and disk_version != VERSION:
+                        rumps.notification("Sit Monitor", t("tray.menu.check_updates"),
+                                           t("tray.notify.restart_needed", old=VERSION, new=disk_version))
+                        self._restart_app()
+                        return
                     rumps.notification("Sit Monitor", t("tray.menu.check_updates"), t("tray.notify.up_to_date"))
                     return
 
@@ -1057,21 +1064,40 @@ class TrayApp(rumps.App):
                 rumps.notification("Sit Monitor", t("tray.notify.update_done"),
                                    git_log or "OK")
 
-                # 自动重启：停止监控后 re-exec
-                self._stop_monitor()
-                time.sleep(1)
-                python = python_executable()
-                script = os.path.join(PROJECT_DIR, "sit_monitor.py")
-                args = [python, script, "--tray"]
-                if self.debug:
-                    args.append("--debug")
-                subprocess.Popen(args)
-                rumps.quit_application()
+                self._restart_app()
 
             except Exception as e:
                 rumps.notification("Sit Monitor", t("tray.notify.update_failed"), str(e))
 
         threading.Thread(target=do_update, daemon=True).start()
+
+    def _read_disk_version(self):
+        """读取磁盘上源码中的 VERSION，与运行中的 VERSION 比较"""
+        try:
+            tray_path = os.path.join(PROJECT_DIR, "sit_monitor", "tray.py")
+            with open(tray_path) as f:
+                for line in f:
+                    if line.startswith("VERSION"):
+                        return line.split('"')[1]
+        except Exception:
+            pass
+        return None
+
+    def _restart_app(self):
+        """停止所有组件并重启"""
+        self._stop_preview()
+        self._stop_overlay()
+        self._stop_exercise()
+        self._stop_monitor()
+        self._stop_cloud()
+        time.sleep(1)
+        python = python_executable()
+        script = os.path.join(PROJECT_DIR, "sit_monitor.py")
+        args = [python, script, "--tray"]
+        if self.debug:
+            args.append("--debug")
+        subprocess.Popen(args)
+        rumps.quit_application()
 
     # --- About ---
 
