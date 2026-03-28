@@ -75,6 +75,7 @@ class TrayApp:
         self.monitor = None
         self.monitor_thread = None
         self._exercise_proc = None
+        self._overlay_proc = None
         self._state = "stopped"
         self._details = {}
         self._posture_hint = "— 未启动"
@@ -93,6 +94,10 @@ class TrayApp:
             pystray.MenuItem(
                 lambda item: "Stop Monitoring" if self._is_running() else "Start Monitoring",
                 self._toggle_monitor,
+            ),
+            pystray.MenuItem(
+                lambda item: "\U0001f9b4 Hide Skeleton" if self._is_overlay_running() else "\U0001f9b4 Skeleton Overlay",
+                self._toggle_overlay,
             ),
             pystray.MenuItem("Pause Alerts 10min", self._snooze),
             pystray.Menu.SEPARATOR,
@@ -306,6 +311,32 @@ class TrayApp:
                 self._exercise_proc.kill()
             self._exercise_proc = None
             self._update_icon("stopped")
+
+    # --- Overlay ---
+
+    def _is_overlay_running(self):
+        return self._overlay_proc is not None and self._overlay_proc.poll() is None
+
+    def _toggle_overlay(self):
+        if self._is_overlay_running():
+            self._stop_overlay()
+        else:
+            self._start_overlay()
+
+    def _start_overlay(self):
+        python = sys.executable
+        args = [python, "-m", "sit_monitor", "overlay",
+                "--camera", str(self.settings.camera)]
+        self._overlay_proc = subprocess.Popen(args)
+
+    def _stop_overlay(self):
+        if self._overlay_proc and self._overlay_proc.poll() is None:
+            self._overlay_proc.terminate()
+            try:
+                self._overlay_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._overlay_proc.kill()
+            self._overlay_proc = None
 
     # --- Snooze ---
 
@@ -593,6 +624,7 @@ class TrayApp:
 
     def _quit(self):
         self._stop_exercise()
+        self._stop_overlay()
         self._stop_monitor()
         self._stop_cloud()
         if self._icon:

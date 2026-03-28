@@ -53,6 +53,7 @@ class TrayApp(rumps.App):
         self.monitor_thread = None
         self._exercise_proc = None
         self._preview_proc = None
+        self._overlay_proc = None
         self._state = "stopped"
         self._details = {}
         self._ui_dirty = False
@@ -98,6 +99,7 @@ class TrayApp(rumps.App):
         self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
+        self._mi_overlay = rumps.MenuItem(t("tray.menu.show_overlay"), callback=self._toggle_overlay)
         self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
         self._mi_cloud = rumps.MenuItem(
@@ -108,6 +110,7 @@ class TrayApp(rumps.App):
             self._mi_hint,
             None,
             self._mi_start,
+            self._mi_overlay,
             self._mi_pushup,
             self._mi_stance,
             rumps.MenuItem(t("tray.menu.quick_battle"), callback=self._quick_battle),
@@ -127,6 +130,7 @@ class TrayApp(rumps.App):
         self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_preview = rumps.MenuItem(t("tray.menu.show_camera"), callback=self._toggle_preview)
+        self._mi_overlay = rumps.MenuItem(t("tray.menu.show_overlay"), callback=self._toggle_overlay)
         self._mi_snooze = rumps.MenuItem(t("tray.menu.pause_alerts"), callback=self._snooze)
         self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
@@ -208,6 +212,7 @@ class TrayApp(rumps.App):
             None,
             self._mi_start,
             self._mi_preview,
+            self._mi_overlay,
             self._mi_snooze,
             self._mi_stance,
             None,
@@ -500,6 +505,41 @@ class TrayApp(rumps.App):
             except subprocess.TimeoutExpired:
                 self._preview_proc.kill()
             self._preview_proc = None
+
+    # --- Overlay ---
+
+    def _is_overlay_running(self):
+        return self._overlay_proc is not None and self._overlay_proc.poll() is None
+
+    def _toggle_overlay(self, sender):
+        if self._is_overlay_running():
+            self._stop_overlay()
+            sender.title = t("tray.menu.show_overlay")
+        else:
+            self._start_overlay(sender)
+
+    def _start_overlay(self, sender):
+        python = python_executable()
+        args = [python, "-m", "sit_monitor", "overlay",
+                "--camera", str(self.settings.camera)]
+        self._overlay_proc = subprocess.Popen(args, cwd=PROJECT_DIR)
+        sender.title = t("tray.menu.hide_overlay")
+
+        def wait_and_cleanup():
+            self._overlay_proc.wait()
+            sender.title = t("tray.menu.show_overlay")
+            self._overlay_proc = None
+
+        threading.Thread(target=wait_and_cleanup, daemon=True).start()
+
+    def _stop_overlay(self):
+        if self._overlay_proc and self._overlay_proc.poll() is None:
+            self._overlay_proc.terminate()
+            try:
+                self._overlay_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._overlay_proc.kill()
+            self._overlay_proc = None
 
     # --- Snooze ---
 
@@ -968,6 +1008,7 @@ class TrayApp(rumps.App):
 
                 if install_and_restart(dmg_path):
                     self._stop_preview()
+                    self._stop_overlay()
                     self._stop_exercise()
                     self._stop_monitor()
                     self._stop_cloud()
@@ -1054,6 +1095,7 @@ class TrayApp(rumps.App):
     @rumps.clicked("Quit")
     def quit_app(self, _):
         self._stop_preview()
+        self._stop_overlay()
         self._stop_exercise()
         self._stop_monitor()
         self._stop_cloud()

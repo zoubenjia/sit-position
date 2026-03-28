@@ -11,8 +11,8 @@ from sit_monitor.i18n import t
 def parse_args():
     p = argparse.ArgumentParser(description="坐姿监控 & 运动指导")
     p.add_argument("mode", nargs="?", default="posture",
-                   choices=["posture", "pushup", "preview"],
-                   help="运行模式: posture=坐姿监控(默认), pushup=俯卧撑训练, preview=摄像头预览")
+                   choices=["posture", "pushup", "preview", "overlay"],
+                   help="运行模式: posture=坐姿监控(默认), pushup=俯卧撑训练, preview=摄像头预览, overlay=骨骼线叠加")
     p.add_argument("--camera", type=int, default=0, help="摄像头索引 (默认: 0)")
     p.add_argument("--interval", type=float, default=5.0, help="检测间隔/秒 (默认: 5.0)")
     p.add_argument("--bad-seconds", type=int, default=30, help="连续坏姿势多少秒后通知 (默认: 30)")
@@ -175,6 +175,25 @@ def _run_preview(args):
     cv2.destroyAllWindows()
 
 
+def _acquire_lock():
+    """确保只有一个 sit_monitor 实例运行（posture 模式）。
+
+    使用 fcntl 文件锁，进程退出后自动释放。
+    """
+    import fcntl
+    import tempfile
+
+    lock_path = os.path.join(tempfile.gettempdir(), "sit_monitor.lock")
+    lock_file = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("sit_monitor 已在运行，退出。")
+        sys.exit(0)
+    # 保持 lock_file 打开，进程退出时自动释放
+    return lock_file
+
+
 def main():
     from sit_monitor.paths import is_bundled
     args = parse_args()
@@ -184,9 +203,13 @@ def main():
         args.tray = False
 
     if args.mode == "posture":
+        _lock = _acquire_lock()  # noqa: F841
         _run_posture(args)
     elif args.mode == "preview":
         _run_preview(args)
+    elif args.mode == "overlay":
+        from sit_monitor.overlay import run_overlay
+        run_overlay(camera=args.camera)
     else:
         _run_exercise(args)
 
