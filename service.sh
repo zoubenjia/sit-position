@@ -92,7 +92,9 @@ do_start() {
         return
     fi
 
-    nohup "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
+    # 不用 nohup — macOS 上 nohup 会断开 GUI session，导致 rumps 无法显示菜单栏图标
+    "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
+    disown $!
     echo $! > "$TRAY_PID_FILE"
     echo "已启动托盘模式 (PID: $!)"
 }
