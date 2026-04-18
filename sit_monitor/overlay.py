@@ -81,9 +81,10 @@ def _run_overlay_macos(camera_idx: int):
     window.setIgnoresMouseEvents_(True)
     window.setCollectionBehavior_(1 << 4)  # canJoinAllSpaces
 
-    # Shared state
+    # Shared state — show_bad is the debounced display flag
     _lock = threading.Lock()
-    _state = {"landmarks": None, "is_bad": False, "problems": [], "running": True}
+    _state = {"landmarks": None, "is_bad": False, "show_bad": False,
+              "problems": [], "running": True}
 
     # Landmark indices for reference lines
     _LS = mp_lib.tasks.vision.PoseLandmark.LEFT_SHOULDER
@@ -100,10 +101,10 @@ def _run_overlay_macos(camera_idx: int):
 
             with _lock:
                 lm = _state["landmarks"]
-                is_bad = _state["is_bad"]
+                show_bad = _state["show_bad"]
                 problems = list(_state["problems"])
 
-            if lm is None or not is_bad:
+            if lm is None or not show_bad:
                 return
 
             vw = self.bounds().size.width
@@ -220,6 +221,11 @@ def _run_overlay_macos(camera_idx: int):
         if not cap.isOpened():
             _state["running"] = False
             return
+        bad_streak = 0       # consecutive bad frames
+        last_bad_time = 0.0  # timestamp of last bad frame
+        BAD_THRESHOLD = 3    # show after N consecutive bad frames
+        GOOD_DELAY = 3.0     # keep showing for N seconds after turning good
+
         try:
             while _state["running"]:
                 ret, frame = cap.read()
@@ -228,6 +234,8 @@ def _run_overlay_macos(camera_idx: int):
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp_lib.Image(image_format=mp_lib.ImageFormat.SRGB, data=rgb)
                 results = landmarker.detect(mp_image)
+
+                now = time.time()
                 with _lock:
                     if results.pose_landmarks:
                         lm = results.pose_landmarks[0]
@@ -235,9 +243,23 @@ def _run_overlay_macos(camera_idx: int):
                         _state["landmarks"] = lm
                         _state["is_bad"] = is_bad
                         _state["problems"] = ptypes
+
+                        if is_bad:
+                            bad_streak += 1
+                            last_bad_time = now
+                        else:
+                            bad_streak = 0
+
+                        # Debounce: show after BAD_THRESHOLD consecutive bad frames,
+                        # hide GOOD_DELAY seconds after last bad frame
+                        _state["show_bad"] = (
+                            bad_streak >= BAD_THRESHOLD
+                            or (now - last_bad_time < GOOD_DELAY and last_bad_time > 0)
+                        )
                     else:
                         _state["landmarks"] = None
                         _state["problems"] = []
+                        bad_streak = 0
                 time.sleep(0.03)
         finally:
             landmarker.close()
