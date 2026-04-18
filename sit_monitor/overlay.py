@@ -103,12 +103,12 @@ def _run_overlay_macos(camera_idx: int):
                 is_bad = _state["is_bad"]
                 problems = list(_state["problems"])
 
-            if lm is None:
+            if lm is None or not is_bad:
                 return
 
             vw = self.bounds().size.width
             vh = self.bounds().size.height
-            color = NSColor.redColor() if is_bad else NSColor.greenColor()
+            color = NSColor.redColor()
 
             # --- Reference guide lines (drawn first, behind skeleton) ---
             ref_color = NSColor.colorWithCalibratedRed_green_blue_alpha_(
@@ -321,7 +321,12 @@ def _run_overlay_cv(camera_idx: int):
             if results.pose_landmarks:
                 lm = results.pose_landmarks[0]
                 is_bad, details, reasons, ptypes = evaluate_posture(lm, settings.thresholds)
-                color = (0, 0, 255) if is_bad else (0, 255, 0)
+                if not is_bad:
+                    cv2.imshow(win_name, canvas)
+                    if cv2.waitKey(30) & 0xFF in (ord("q"), 27):
+                        break
+                    continue
+                color = (0, 0, 255)
                 ref_normal = (60, 60, 60)  # faint grey
                 ref_warn = (0, 140, 255)   # orange (BGR)
 
