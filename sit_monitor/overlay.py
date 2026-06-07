@@ -54,7 +54,9 @@ def _run_overlay_macos(camera_idx: int):
         NSDefaultRunLoopMode, NSMakePoint, NSMakeRect, NSObject,
         NSRunLoop, NSTimer,
     )
-    import Quartz
+    # kCGOverlayWindowLevel = 102（CoreGraphics 窗口层级常量）。
+    # 直接用数值，避免依赖 pyobjc-framework-Quartz（rumps 只装了 Cocoa 框架）。
+    _OVERLAY_WINDOW_LEVEL = 102
 
     settings = Settings.load()
     app = NSApplication.sharedApplication()
@@ -77,7 +79,7 @@ def _run_overlay_macos(camera_idx: int):
     window.setBackgroundColor_(NSColor.clearColor())
     window.setOpaque_(False)
     window.setHasShadow_(False)
-    window.setLevel_(Quartz.kCGOverlayWindowLevel)
+    window.setLevel_(_OVERLAY_WINDOW_LEVEL)
     window.setIgnoresMouseEvents_(True)
     window.setCollectionBehavior_(1 << 4)  # canJoinAllSpaces
 

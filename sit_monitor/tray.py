@@ -18,7 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
@@ -57,6 +57,8 @@ class TrayApp(rumps.App):
         self._state = "stopped"
         self._details = {}
         self._ui_dirty = False
+        self._ui_timer = None       # UI 刷新定时器引用（睡眠唤醒后用于重建）
+        self._wake_observer = None  # 系统唤醒通知观察者
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         # Cloud
@@ -1136,10 +1138,12 @@ class TrayApp(rumps.App):
             # 初始化云端功能
             self._init_cloud()
 
-        # 每 0.5 秒在主线程更新 UI
-        @rumps.timer(0.5)
-        def ui_update(timer):
-            self._poll_ui_update(timer)
+        # 每 0.5 秒在主线程更新 UI。
+        # 显式创建并保存引用（而非用 @rumps.timer 装饰器），以便系统睡眠唤醒后
+        # 重建失效的 NSTimer —— rumps 在 super().run() 前 start() 装饰器 timer，
+        # 这里在 super().run() 前手动 start() 行为完全一致。
+        self._ui_timer = rumps.Timer(self._poll_ui_update, 0.5)
+        self._ui_timer.start()
 
         # 每 60 秒检查是否需要发送每日报告
         @rumps.timer(60)
@@ -1151,4 +1155,37 @@ class TrayApp(rumps.App):
         def achievement_check(timer):
             self._check_achievements()
 
+        # 监听系统从睡眠唤醒：唤醒后 NSTimer 的 mach port 会失效，
+        # 导致 UI 定时器停止触发、菜单栏图标卡住，需重建定时器。
+        self._register_wake_observer()
+
         super().run()
+
+    def _register_wake_observer(self):
+        """注册系统唤醒通知观察者（NSWorkspaceDidWakeNotification）。"""
+        try:
+            from AppKit import NSWorkspace
+            nc = NSWorkspace.sharedWorkspace().notificationCenter()
+            self._wake_observer = nc.addObserverForName_object_queue_usingBlock_(
+                "NSWorkspaceDidWakeNotification", None, None,
+                lambda note: self._on_system_wake(),
+            )
+            log.info("registered system wake observer")
+        except Exception:
+            log.exception("failed to register system wake observer")
+
+    def _on_system_wake(self):
+        """系统唤醒回调（主线程）：重建 UI 定时器并强制刷新一次图标。"""
+        log.info("system woke from sleep, rebuilding UI timer")
+        try:
+            if self._ui_timer is not None:
+                self._ui_timer.stop()
+                self._ui_timer.start()
+        except Exception:
+            log.exception("failed to rebuild UI timer on wake")
+        # 强制刷新一次，避免重建后等下一个 tick 才更新
+        self._ui_dirty = True
+        try:
+            self._poll_ui_update(None)
+        except Exception:
+            log.exception("failed to force UI refresh on wake")
