@@ -55,6 +55,11 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - menu items =====
     "tray.menu.posture_good": "\u2713 Good Posture",
+    "tray.menu.progressive": "Progressive plan",
+    "tray.menu.stage_adjust": "Adjust stage",
+    "tray.progress.summary": "Plan: stage {stage}/{max} \u00b7 today {ratio}% good \u00b7 streak {met}/{goal} days",
+    "progression.advance.title": "\U0001f389 Level up",
+    "progression.advance.msg": "Welcome to stage {stage}! One step closer to ideal posture",
     "tray.menu.start_monitoring": "Start Monitoring",
     "tray.menu.stop_monitoring": "Stop Monitoring",
     "tray.menu.pushup_training": "\ud83c\udfcb\ufe0f Pushup Training",

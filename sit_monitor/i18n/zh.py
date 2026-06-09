@@ -55,6 +55,11 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - menu items =====
     "tray.menu.posture_good": "✓ 姿势良好",
+    "tray.menu.progressive": "渐进式计划",
+    "tray.menu.stage_adjust": "调整阶段",
+    "tray.progress.summary": "纠正计划：阶段 {stage}/{max} · 今日良好率 {ratio}% · 连续达标 {met}/{goal} 天",
+    "progression.advance.title": "🎉 进阶啦",
+    "progression.advance.msg": "恭喜进入阶段 {stage}！坐姿标准又近了一步",
     "tray.menu.start_monitoring": "开始监控",
     "tray.menu.stop_monitoring": "停止监控",
     "tray.menu.pushup_training": "🏋️ 俯卧撑训练",
