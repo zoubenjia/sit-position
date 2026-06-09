@@ -75,6 +75,10 @@ def achievements_state_path() -> str:
     return os.path.join(log_dir(), "achievements.json")
 
 
+def progression_state_path() -> str:
+    return os.path.join(log_dir(), "progression.json")
+
+
 def sync_state_path() -> str:
     return os.path.join(log_dir(), "sync_state.json")
 
