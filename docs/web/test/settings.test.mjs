@@ -18,11 +18,18 @@ test("loadSettings: 无存储时返回默认值", () => {
   assert.strictEqual(s.lang, DEFAULTS.lang);
 });
 
-test("saveSettings + loadSettings: 往返一致", () => {
-  saveSettings({ ...DEFAULTS, shoulder: 15, lang: "en" });
+test("saveSettings + loadSettings: UI 偏好往返一致", () => {
+  saveSettings({ ...DEFAULTS, lang: "en", sound: false });
   const s = loadSettings();
-  assert.strictEqual(s.shoulder, 15);
   assert.strictEqual(s.lang, "en");
+  assert.strictEqual(s.sound, false);
+});
+
+test("loadSettings: 阈值始终取 DEFAULTS，不被旧缓存锁死", () => {
+  saveSettings({ ...DEFAULTS, neck: 99, shoulder: 99 });
+  const s = loadSettings();
+  assert.strictEqual(s.neck, DEFAULTS.neck);
+  assert.strictEqual(s.shoulder, DEFAULTS.shoulder);
 });
 
 test("loadSettings: 损坏 JSON 回退默认值", () => {
