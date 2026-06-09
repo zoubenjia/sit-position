@@ -183,6 +183,119 @@ def generate(size: int, state: str = "good",
     return img
 
 
+# ── 单符号占满图标（菜单栏 22px 也清晰）──
+# 每个状态用一个截然不同的大符号，砍掉小人细节换辨识度：
+#   good=绿对勾  arrow_*=橙纠正箭头  shoulder=橙倾斜线
+#   clock=红时钟(久坐)  moon=红月亮(疲劳)  exercise=蓝俯卧撑  gray=灰待机环
+
+_SYM_COLOR = {
+    "good": _GREEN,
+    "arrow_left": _ORANGE, "arrow_right": _ORANGE, "arrow_up": _ORANGE,
+    "shoulder": _ORANGE, "shoulder_left": _ORANGE, "shoulder_right": _ORANGE,
+    "clock": _RED, "moon": _RED,
+    "exercise": _BLUE,
+    "gray": _GRAY,
+}
+
+
+def _sp(s, x, y):
+    return (round(x * s), round(y * s))
+
+
+def _sym_check(d, s, color, w):
+    d.line([_sp(s, 9, 24), _sp(s, 18, 33)], fill=color, width=w)
+    d.line([_sp(s, 18, 33), _sp(s, 35, 11)], fill=color, width=w)
+
+
+def _sym_arrow(d, s, direction, color, w):
+    cx, cy, L, h = 22.0, 22.0, 15.0, 8.0
+    if direction == "arrow_right":
+        a, b = (cx - L, cy), (cx + L, cy)
+        d.line([_sp(s, *a), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] - h, b[1] - h), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] - h, b[1] + h), _sp(s, *b)], fill=color, width=w)
+    elif direction == "arrow_left":
+        a, b = (cx + L, cy), (cx - L, cy)
+        d.line([_sp(s, *a), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] + h, b[1] - h), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] + h, b[1] + h), _sp(s, *b)], fill=color, width=w)
+    elif direction == "arrow_up":
+        a, b = (cx, cy + L), (cx, cy - L)
+        d.line([_sp(s, *a), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] - h, b[1] + h), _sp(s, *b)], fill=color, width=w)
+        d.line([_sp(s, b[0] + h, b[1] + h), _sp(s, *b)], fill=color, width=w)
+
+
+def _sym_shoulder(d, s, color, w, thin, high_side="right"):
+    if high_side == "left":
+        d.line([_sp(s, 8, 14), _sp(s, 36, 27)], fill=color, width=w)   # 左肩高 \
+    else:
+        d.line([_sp(s, 8, 27), _sp(s, 36, 14)], fill=color, width=w)   # 右肩高 /
+    for x in range(8, 37, 6):                                          # 水平基准虚线
+        d.line([_sp(s, x, 34), _sp(s, x + 3, 34)], fill=color, width=thin)
+
+
+def _sym_clock(d, s, color, w):
+    cx, cy, r = 22.0, 22.0, 15.0
+    d.ellipse([_sp(s, cx - r, cy - r), _sp(s, cx + r, cy + r)], outline=color, width=w)
+    d.line([_sp(s, cx, cy), _sp(s, cx, cy - 9)], fill=color, width=w)
+    d.line([_sp(s, cx, cy), _sp(s, cx + 7, cy)], fill=color, width=w)
+
+
+def _sym_moon(d, s, color):
+    cx, cy, r = 24.0, 22.0, 15.0
+    d.ellipse([_sp(s, cx - r, cy - r), _sp(s, cx + r, cy + r)], fill=color)
+    d.ellipse([_sp(s, cx - r + 6, cy - r - 3), _sp(s, cx + r + 6, cy + r - 3)],
+              fill=(0, 0, 0, 0))
+
+
+def _sym_idle(d, s, w):
+    cx, cy, r = 22.0, 22.0, 11.0
+    d.ellipse([_sp(s, cx - r, cy - r), _sp(s, cx + r, cy + r)], outline=_GRAY, width=w)
+
+
+def generate_symbol(size: int, symbol: str) -> Image.Image:
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    s = size / 44.0
+    w = max(2, round(4 * s))
+    thin = max(1, round(2 * s))
+    color = _SYM_COLOR.get(symbol, _GRAY)
+    if symbol == "good":
+        _sym_check(d, s, color, w + 1)
+    elif symbol in ("arrow_left", "arrow_right", "arrow_up"):
+        _sym_arrow(d, s, symbol, color, w + 1)
+    elif symbol == "shoulder_left":
+        _sym_shoulder(d, s, color, w + 1, thin, "left")
+    elif symbol in ("shoulder_right", "shoulder"):
+        _sym_shoulder(d, s, color, w + 1, thin, "right")
+    elif symbol == "clock":
+        _sym_clock(d, s, color, w)
+    elif symbol == "moon":
+        _sym_moon(d, s, color)
+    elif symbol == "exercise":
+        _draw_pushup(d, size, _BLUE)
+    else:
+        _sym_idle(d, s, w)
+    return img
+
+
+_sym_path_cache: Dict[str, str] = {}
+
+
+def symbol_path(symbol: str) -> str:
+    """生成单符号图标并返回 1x PNG 路径（同目录生成 @2x 供 rumps）。"""
+    if symbol in _sym_path_cache:
+        return _sym_path_cache[symbol]
+    d = _tmp()
+    p1 = os.path.join(d, f"sym_{symbol}.png")
+    p2 = os.path.join(d, f"sym_{symbol}@2x.png")
+    generate_symbol(22, symbol).save(p1)
+    generate_symbol(44, symbol).save(p2)
+    _sym_path_cache[symbol] = p1
+    return p1
+
+
 # ── macOS (rumps) 接口：返回文件路径 ──
 
 def icon_path(state: str = "good", problems: List[str] = None) -> str:

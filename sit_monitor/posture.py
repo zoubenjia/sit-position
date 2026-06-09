@@ -146,4 +146,9 @@ def evaluate_posture(landmarks, thresholds):
         reasons.append(t("posture.torso_forward", angle=f"{tf:.1f}"))
         problem_types.append("torso")
 
+    # 保留方向符号供图标画纠正箭头（details 里的角度已被 abs，故单独存方向）
+    # shoulder_dir: +1=左肩高, -1=右肩高；head_tilt_dir: +1=头向右歪, -1=头向左歪
+    details["shoulder_dir"] = 0 if st is None else (1 if st > 0 else -1)
+    details["head_tilt_dir"] = 0 if ht is None else (1 if ht > 0 else -1)
+
     return len(reasons) > 0, details, reasons, problem_types

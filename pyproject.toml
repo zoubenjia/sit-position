@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sit-monitor"
-version = "1.5.1"
+version = "1.5.2"
 description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ dependencies = [
     "Pillow",
     "rumps",
     "httpx>=0.27",
+    "certifi",  # mediapipe>=0.10.35 运行时调用 certifi.where()，但未声明此依赖
 ]
 
 [project.scripts]

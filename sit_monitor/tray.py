@@ -18,7 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
@@ -27,6 +27,7 @@ PROJECT_DIR = project_dir()
 # 动态图标生成
 try:
     from sit_monitor.icon_gen import icon_path as _gen_icon_path
+    from sit_monitor.icon_gen import symbol_path as _gen_symbol_path
     _HAS_ICON_GEN = True
 except ImportError:
     _HAS_ICON_GEN = False
@@ -45,7 +46,7 @@ _ICON_FILES = {
 
 class TrayApp(rumps.App):
     def __init__(self, settings: Settings, debug=False):
-        _init_icon = _gen_icon_path("stopped") if _HAS_ICON_GEN else _ICON_FILES["stopped"]
+        _init_icon = _gen_symbol_path("gray") if _HAS_ICON_GEN else _ICON_FILES["stopped"]
         super().__init__("Sit Monitor", icon=_init_icon, quit_button=None)
         self.settings = settings
         self.debug = debug
@@ -293,9 +294,35 @@ class TrayApp(rumps.App):
 
     # --- 图标 ---
 
-    def _set_icon(self, state, problems=None):
+    def _icon_symbol(self, state, details):
+        """根据状态+细节决定菜单栏符号。
+        优先级：运动 > 待机 > 疲劳 > 久坐 > 姿势偏 > 好。"""
+        if state == "exercise":
+            return "exercise"
+        if state in ("stopped", "away", "camera_wait", "camera_adjust"):
+            return "gray"
+        fatigue = details.get("fatigue") or {}
+        if fatigue.get("level") in ("tired", "very_tired"):
+            return "moon"
+        if details.get("sit_minutes", 0) >= self.settings.sit_max_minutes:
+            return "clock"
+        problems = details.get("problems") or []
+        ang = details.get("details") or {}
+        if problems:
+            if "neck" in problems or "torso" in problems:
+                return "arrow_up"          # 前倾 → 坐直
+            if "head_tilt" in problems:
+                # head_tilt_dir: +1=头向右歪(该向左), -1=头向左歪(该向右)
+                return "arrow_left" if ang.get("head_tilt_dir", 0) > 0 else "arrow_right"
+            if "shoulder" in problems:
+                # shoulder_dir: +1=左肩高, -1=右肩高
+                return "shoulder_left" if ang.get("shoulder_dir", 0) > 0 else "shoulder_right"
+        return "good"
+
+    def _set_icon(self, state, details=None):
+        details = details or {}
         if _HAS_ICON_GEN:
-            path = _gen_icon_path(state, problems or [])
+            path = _gen_symbol_path(self._icon_symbol(state, details))
         else:
             path = _ICON_FILES.get(state, _ICON_FILES["stopped"])
         if os.path.exists(path):
@@ -315,8 +342,7 @@ class TrayApp(rumps.App):
         if not self._ui_dirty:
             return
         self._ui_dirty = False
-        problems = self._details.get("problems", [])
-        self._set_icon(self._state, problems)
+        self._set_icon(self._state, self._details)
         self._update_stats_menu()
         self._update_posture_hint(self._state, self._details)
 
@@ -1138,12 +1164,17 @@ class TrayApp(rumps.App):
             # 初始化云端功能
             self._init_cloud()
 
-        # 每 0.5 秒在主线程更新 UI。
-        # 显式创建并保存引用（而非用 @rumps.timer 装饰器），以便系统睡眠唤醒后
-        # 重建失效的 NSTimer —— rumps 在 super().run() 前 start() 装饰器 timer，
-        # 这里在 super().run() 前手动 start() 行为完全一致。
-        self._ui_timer = rumps.Timer(self._poll_ui_update, 0.5)
-        self._ui_timer.start()
+        # 每 0.5 秒在主线程更新 UI。必须用 @rumps.timer 装饰器注册，由 rumps 在
+        # super().run() 内部、NSApplication 初始化之后统一 start()——手动提前
+        # start() 在完整 NSApp 启动流程下不会触发。装饰后立即捕获 rumps 创建的
+        # Timer 实例引用，供系统睡眠唤醒后重建失效的 NSTimer。
+        @rumps.timer(0.5)
+        def ui_update(timer):
+            self._poll_ui_update(timer)
+        try:
+            self._ui_timer = getattr(rumps.timer, "*timers")[-1]
+        except Exception:
+            self._ui_timer = None
 
         # 每 60 秒检查是否需要发送每日报告
         @rumps.timer(60)
