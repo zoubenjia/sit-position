@@ -16,7 +16,8 @@ from sit_monitor.debug import draw_debug
 from sit_monitor.platform import send_notification, media_play_pause, is_in_call
 from sit_monitor.tts import speak
 
-from sit_monitor.paths import model_path, face_model_path, log_dir
+from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
+from sit_monitor.progression import ProgressionTracker
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -58,6 +59,7 @@ class PostureMonitor:
         self.snooze_until = 0  # 暂停提醒截止时间戳
         self.logger = setup_logging()
         self.stats = Stats()
+        self.progression = ProgressionTracker(progression_state_path())
 
     def _notify_state(self, state, **details):
         if self.on_state_change:
@@ -145,12 +147,11 @@ class PostureMonitor:
         )
         landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
 
-        # FaceLandmarker 初始化（疲劳检测）
+        # FaceLandmarker 初始化（人脸验证 + 疲劳检测）
         face_landmarker = None
         fatigue_tracker = None
         last_fatigue_notify_time = 0
-        if s.fatigue_enabled and os.path.exists(FACE_MODEL_PATH):
-            from sit_monitor.fatigue import FatigueTracker
+        if os.path.exists(FACE_MODEL_PATH):
             face_base = mp.tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH)
             face_options = mp.tasks.vision.FaceLandmarkerOptions(
                 base_options=face_base,
@@ -160,10 +161,12 @@ class PostureMonitor:
                 num_faces=1,
             )
             face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(face_options)
-            fatigue_tracker = FatigueTracker(
-                ear_threshold=s.ear_threshold,
-                mar_threshold=s.mar_threshold,
-            )
+            if s.fatigue_enabled:
+                from sit_monitor.fatigue import FatigueTracker
+                fatigue_tracker = FatigueTracker(
+                    ear_threshold=s.ear_threshold,
+                    mar_threshold=s.mar_threshold,
+                )
 
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
@@ -191,7 +194,10 @@ class PostureMonitor:
             while self.running:
                 now = time.time()
                 # 运行中实时读取设置（托盘可能已修改）
-                thresholds = s.thresholds
+                if s.progressive_enabled:
+                    thresholds = self.progression.current_thresholds()
+                else:
+                    thresholds = s.thresholds
 
                 # --- 摄像头管理 ---
                 if cap is None or not cap.isOpened():
@@ -240,11 +246,22 @@ class PostureMonitor:
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 results = landmarker.detect(mp_image)
                 person_present = False
+                face_detected = False
                 if results.pose_landmarks:
                     _lm = results.pose_landmarks[0]
                     _ls_vis = _lm[mp.tasks.vision.PoseLandmark.LEFT_SHOULDER].visibility
                     _rs_vis = _lm[mp.tasks.vision.PoseLandmark.RIGHT_SHOULDER].visibility
-                    person_present = _ls_vis >= 0.65 and _rs_vis >= 0.65
+                    _nose_vis = _lm[mp.tasks.vision.PoseLandmark.NOSE].visibility
+                    _basic = (_ls_vis >= 0.80 and _rs_vis >= 0.80
+                              and _nose_vis >= 0.5)
+                    if _basic and face_landmarker:
+                        # 用人脸检测验证：椅子没有脸
+                        face_results = face_landmarker.detect(mp_image)
+                        face_detected = bool(face_results.face_landmarks)
+                        person_present = face_detected
+                    elif _basic:
+                        # 没有人脸模型时退回旧逻辑
+                        person_present = True
 
                 # 是否使用 Notification Center（托盘模式下用横幅）
                 use_nc = self.on_state_change is not None
@@ -275,6 +292,9 @@ class PostureMonitor:
                     bad_start_time = None
                     present_streak = 0
                     self.stats.record("away", now)
+                    if self.settings.progressive_enabled:
+                        from datetime import date
+                        self.progression.record("away", now, date.today().isoformat())
 
                     if away_start_time is None:
                         away_start_time = now
@@ -387,10 +407,9 @@ class PostureMonitor:
 
                     is_bad, details, reasons, problem_types = evaluate_posture(lm, thresholds)
 
-                    # --- 疲劳检测 ---
+                    # --- 疲劳检测（复用 person_present 阶段的 face_results）---
                     fatigue_level = "normal"
-                    if s.fatigue_enabled and face_landmarker and fatigue_tracker:
-                        face_results = face_landmarker.detect(mp_image)
+                    if s.fatigue_enabled and fatigue_tracker and face_detected:
                         if face_results.face_landmarks:
                             fatigue_level = fatigue_tracker.update(
                                 face_results.face_landmarks[0], now
@@ -423,12 +442,16 @@ class PostureMonitor:
                     log_data["stance"] = current_stance
                     if fatigue_level != "normal":
                         log_data["fatigue"] = fatigue_level
+                    state_str = "bad" if is_bad else "good"
+                    self.stats.record(state_str, now)
                     if is_bad:
-                        self.stats.record("bad", now)
                         log_event(self.logger, "bad", reasons=[r for r in reasons], **log_data)
                     else:
-                        self.stats.record("good", now)
                         log_event(self.logger, "good", **log_data)
+                    if self.settings.progressive_enabled:
+                        from datetime import date
+                        # 进阶事件由 tray 主线程 pop_advance_event 处理（避免跨线程调 AppKit）
+                        self.progression.record(state_str, now, date.today().isoformat())
 
                     # 防抖：需要连续 3 帧 good 才算真正恢复
                     GOOD_STREAK_REQUIRED = 3

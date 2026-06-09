@@ -115,7 +115,7 @@ class TestEvaluatePosture:
     def test_good_posture(self):
         landmarks = _make_landmarks()
         thresholds = {"shoulder": 7, "neck": 10, "torso": 5}
-        is_bad, details, reasons = evaluate_posture(landmarks, thresholds)
+        is_bad, details, reasons, _ = evaluate_posture(landmarks, thresholds)
         assert not is_bad
         assert len(reasons) == 0
 
@@ -125,15 +125,18 @@ class TestEvaluatePosture:
             RIGHT_EAR: (0.80, 0.20),
         })
         thresholds = {"shoulder": 7, "neck": 10, "torso": 5}
-        is_bad, details, reasons = evaluate_posture(landmarks, thresholds)
+        is_bad, details, reasons, _ = evaluate_posture(landmarks, thresholds)
         assert is_bad
         assert any("下巴" in r for r in reasons)
 
     def test_returns_all_detail_keys(self):
         landmarks = _make_landmarks()
         thresholds = {"shoulder": 99, "neck": 99, "torso": 99}
-        _, details, _ = evaluate_posture(landmarks, thresholds)
-        assert set(details.keys()) == {"shoulder", "neck", "torso", "head_tilt"}
+        _, details, _, _ = evaluate_posture(landmarks, thresholds)
+        assert set(details.keys()) == {
+            "shoulder", "neck", "torso", "head_tilt",
+            "shoulder_dir", "head_tilt_dir",
+        }
 
 
 class TestDetectStance:
