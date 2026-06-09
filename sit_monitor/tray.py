@@ -68,6 +68,8 @@ class TrayApp(rumps.App):
         self._achievement_engine = None
         # Menu item references (set by _build_menu)
         self._mi_hint = None
+        self._mi_progress = None
+        self._mi_progressive_toggle = None
         self._mi_start = None
         self._mi_pushup = None
         self._mi_stats = None
@@ -131,6 +133,11 @@ class TrayApp(rumps.App):
     def _menu_advanced(self, s):
         """进阶模式：完整功能"""
         self._mi_hint = rumps.MenuItem(t("tray.menu.posture_good"), callback=None)
+        self._mi_progress = rumps.MenuItem("", callback=None)
+        self._mi_progressive_toggle = rumps.MenuItem(
+            f"{'☑' if s.progressive_enabled else '☐'} {t('tray.menu.progressive')}",
+            callback=self._toggle_progressive,
+        )
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_preview = rumps.MenuItem(t("tray.menu.show_camera"), callback=self._toggle_preview)
         self._mi_overlay = rumps.MenuItem(t("tray.menu.show_overlay"), callback=self._toggle_overlay)
@@ -185,7 +192,8 @@ class TrayApp(rumps.App):
             f"{'☑' if s.fatigue_enabled else '☐'} {t('tray.menu.fatigue_detection')}",
             callback=self._toggle_fatigue,
         )
-        settings_items.extend([self._mi_sound, self._mi_call_mute, self._mi_auto_pause, None, self._mi_fatigue])
+        settings_items.extend([self._mi_sound, self._mi_call_mute, self._mi_auto_pause, None,
+                               self._mi_fatigue, self._mi_progressive_toggle])
 
         # Social submenu
         self._mi_achievements = rumps.MenuItem(
@@ -212,6 +220,7 @@ class TrayApp(rumps.App):
 
         return [
             self._mi_hint,
+            self._mi_progress,
             None,
             self._mi_start,
             self._mi_preview,
@@ -339,12 +348,35 @@ class TrayApp(rumps.App):
 
     def _poll_ui_update(self, _):
         """主线程定时器：安全地更新 UI"""
+        # 进度/进阶通知不受 _ui_dirty 限制：跨天进阶可能发生在稳态期间，
+        # 在主线程 pop 事件可避免跨线程调 AppKit。
+        self._update_progress_menu()
         if not self._ui_dirty:
             return
         self._ui_dirty = False
         self._set_icon(self._state, self._details)
         self._update_stats_menu()
         self._update_posture_hint(self._state, self._details)
+
+    def _update_progress_menu(self):
+        mon = self.monitor
+        if not mon or not getattr(mon, "progression", None) or not self.settings.progressive_enabled:
+            if self._mi_progress:
+                self._mi_progress.title = ""
+            return
+        prog = mon.progression
+        adv = prog.pop_advance_event()
+        if adv is not None:
+            rumps.notification(
+                t("progression.advance.title"),
+                t("progression.advance.msg", stage=adv), "")
+        s = prog.progress_summary()
+        if self._mi_progress:
+            self._mi_progress.title = t(
+                "tray.progress.summary",
+                stage=s["stage"], max=s["max_stage"],
+                ratio=int(s["today_ratio"] * 100),
+                met=s["consecutive_met"], goal=s["goal_days"])
 
     def _update_posture_hint(self, state, details):
         """实时更新菜单顶部的姿势提示"""
@@ -649,6 +681,12 @@ class TrayApp(rumps.App):
             rumps.notification("Sit Monitor", t("tray.notify.fatigue_on"), t("tray.notify.fatigue_on_msg"))
         else:
             rumps.notification("Sit Monitor", t("tray.notify.fatigue_off"), "")
+
+    def _toggle_progressive(self, sender):
+        self.settings.progressive_enabled = not self.settings.progressive_enabled
+        self.settings.save()
+        sender.title = (f"{'☑' if self.settings.progressive_enabled else '☐'} "
+                        f"{t('tray.menu.progressive')}")
 
     # --- Cloud / Social ---
 
