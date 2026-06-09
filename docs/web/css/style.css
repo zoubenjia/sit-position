@@ -1,0 +1,15 @@
+:root { --green:#4CAF50; --orange:#FF9800; --red:#E53935; --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8b949e; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; padding:24px; }
+main { width:100%; max-width:680px; text-align:center; }
+h1 { font-size:1.4rem; margin-bottom:16px; }
+#stage { position:relative; width:100%; aspect-ratio:4/3; background:var(--card); border-radius:12px; overflow:hidden; }
+#video, #overlay { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+#statusbar { display:flex; align-items:center; justify-content:center; gap:12px; margin:16px 0; font-size:1.2rem; }
+#symbol { font-size:1.6rem; }
+#controls { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; }
+button { background:var(--green); color:#fff; border:0; padding:10px 22px; border-radius:8px; font-size:1rem; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+label, select { color:var(--muted); font-size:.9rem; }
+.hint { color:var(--muted); margin-top:14px; font-size:.85rem; min-height:1.2em; }
+.good { color:var(--green); } .warn { color:var(--orange); } .bad { color:var(--red); } .idle { color:var(--muted); }
