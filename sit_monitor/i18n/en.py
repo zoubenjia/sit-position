@@ -55,6 +55,9 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - menu items =====
     "tray.menu.posture_good": "\u2713 Good Posture",
+    "tray.menu.refresh_ui": "\U0001f504 Refresh UI",
+    "tray.menu.restart_monitor": "\U0001f504 Restart monitoring",
+    "tray.notify.restart_monitor": "Restarting monitoring (reconnecting camera)\u2026",
     "tray.menu.progressive": "Progressive plan",
     "tray.menu.stage_adjust": "Adjust stage",
     "tray.progress.summary": "Plan: stage {stage}/{max} \u00b7 today {ratio}% good \u00b7 streak {met}/{goal} days",

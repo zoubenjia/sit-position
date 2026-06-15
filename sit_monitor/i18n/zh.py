@@ -55,6 +55,9 @@ STRINGS: dict[str, str] = {
 
     # ===== tray - menu items =====
     "tray.menu.posture_good": "✓ 姿势良好",
+    "tray.menu.refresh_ui": "🔄 刷新界面",
+    "tray.menu.restart_monitor": "🔄 重启监控",
+    "tray.notify.restart_monitor": "正在重启监控（重连摄像头）…",
     "tray.menu.progressive": "渐进式计划",
     "tray.menu.stage_adjust": "调整阶段",
     "tray.progress.summary": "纠正计划：阶段 {stage}/{max} · 今日良好率 {ratio}% · 连续达标 {met}/{goal} 天",

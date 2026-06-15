@@ -60,6 +60,7 @@ class TrayApp(rumps.App):
         self._ui_dirty = False
         self._ui_timer = None       # UI 刷新定时器引用（睡眠唤醒后用于重建）
         self._wake_observer = None  # 系统唤醒通知观察者
+        self._activity_token = None  # NSProcessInfo 活动断言（禁 App Nap，须保活）
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         # Cloud
@@ -70,6 +71,8 @@ class TrayApp(rumps.App):
         self._mi_hint = None
         self._mi_progress = None
         self._mi_progressive_toggle = None
+        self._mi_refresh = None
+        self._mi_restart_monitor = None
         self._mi_start = None
         self._mi_pushup = None
         self._mi_stats = None
@@ -105,6 +108,7 @@ class TrayApp(rumps.App):
         self._mi_start = rumps.MenuItem(t("tray.menu.start_monitoring"), callback=self._toggle_monitor)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
         self._mi_overlay = rumps.MenuItem(t("tray.menu.show_overlay"), callback=self._toggle_overlay)
+        self._mi_refresh = rumps.MenuItem(t("tray.menu.refresh_ui"), callback=self._refresh_ui)
         self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
         self._mi_cloud = rumps.MenuItem(
@@ -116,6 +120,7 @@ class TrayApp(rumps.App):
             None,
             self._mi_start,
             self._mi_overlay,
+            self._mi_refresh,
             self._mi_pushup,
             self._mi_stance,
             rumps.MenuItem(t("tray.menu.quick_battle"), callback=self._quick_battle),
@@ -142,6 +147,8 @@ class TrayApp(rumps.App):
         self._mi_preview = rumps.MenuItem(t("tray.menu.show_camera"), callback=self._toggle_preview)
         self._mi_overlay = rumps.MenuItem(t("tray.menu.show_overlay"), callback=self._toggle_overlay)
         self._mi_snooze = rumps.MenuItem(t("tray.menu.pause_alerts"), callback=self._snooze)
+        self._mi_refresh = rumps.MenuItem(t("tray.menu.refresh_ui"), callback=self._refresh_ui)
+        self._mi_restart_monitor = rumps.MenuItem(t("tray.menu.restart_monitor"), callback=self._restart_monitor)
         self._mi_stance = rumps.MenuItem(self._stance_label(), callback=self._cycle_stance)
         self._mi_pushup = rumps.MenuItem(t("tray.menu.pushup_training"), callback=self._toggle_pushup)
         self._mi_stats = rumps.MenuItem(t("tray.menu.statistics"), callback=None)
@@ -226,6 +233,8 @@ class TrayApp(rumps.App):
             self._mi_preview,
             self._mi_overlay,
             self._mi_snooze,
+            self._mi_refresh,
+            self._mi_restart_monitor,
             self._mi_stance,
             None,
             self._mi_pushup,
@@ -1228,7 +1237,54 @@ class TrayApp(rumps.App):
         # 导致 UI 定时器停止触发、菜单栏图标卡住，需重建定时器。
         self._register_wake_observer()
 
+        # 禁用 App Nap：无窗口菜单栏 app 空闲后会被 App Nap 挂起主线程
+        # runloop 上的 NSTimer（UI 刷新停摆、菜单栏定格），而 App Nap 不发
+        # 睡眠唤醒通知、观察者救不回来。持有活动断言即可根治。
+        self._disable_app_nap()
+
         super().run()
+
+    def _disable_app_nap(self):
+        """持有 NSProcessInfo 活动断言阻止 App Nap，令牌存为实例属性保活。
+        用 AllowingIdleSystemSleep（0x00FFFFFF）：禁 App Nap 但仍允许 Mac 正常休眠。"""
+        try:
+            from Foundation import NSProcessInfo
+            # NSActivityUserInitiatedAllowingIdleSystemSleep：禁 App Nap，
+            # 但 *不* 阻止系统空闲休眠（Mac 半夜照常睡）。
+            NSActivityUserInitiated = 0x00FFFFFF
+            NSActivityIdleSystemSleepDisabled = 1 << 20
+            opts = NSActivityUserInitiated & ~NSActivityIdleSystemSleepDisabled
+            self._activity_token = NSProcessInfo.processInfo() \
+                .beginActivityWithOptions_reason_(
+                    opts, "keep menu bar UI refresh timer alive")
+            log.info("App Nap disabled via NSProcessInfo activity assertion")
+        except Exception:
+            log.exception("failed to disable App Nap")
+
+    def _refresh_ui(self, _=None):
+        """手动刷新界面（兜底）：重建 UI 定时器并强制刷新一次，等同唤醒恢复，
+        不依赖任何系统通知。复用 _on_system_wake 的恢复逻辑。"""
+        self._on_system_wake()
+
+    def _restart_monitor(self, _=None):
+        """重启监控线程（重连摄像头），不重启进程、不丢当天累计统计。"""
+        rumps.notification("Sit Monitor", "", t("tray.notify.restart_monitor"))
+        try:
+            self._stop_monitor()
+        except Exception:
+            log.exception("stop monitor failed during restart")
+
+        # 延迟 1.5s 再重开，给摄像头释放时间，避免重连竞争
+        @rumps.timer(1.5)
+        def _relaunch(timer):
+            timer.stop()
+            try:
+                self._start_monitor()
+                if self._mi_start:
+                    self._mi_start.title = t("tray.menu.stop_monitoring")
+            except Exception:
+                log.exception("start monitor failed during restart")
+        self._refresh_ui()  # 顺手把 UI 定时器也刷一遍
 
     def _register_wake_observer(self):
         """注册系统唤醒通知观察者（NSWorkspaceDidWakeNotification）。"""
