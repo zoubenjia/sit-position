@@ -5,6 +5,11 @@ import logging
 import os
 import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
+# 抑制 MediaPipe/absl 的 C++ glog 噪音（clearcut 上报失败等 INFO/WARNING 会灌满
+# stderr 日志），仅保留 ERROR 级。必须在 import mediapipe 之前设置才生效。
+os.environ.setdefault("GLOG_minloglevel", "2")
 
 import cv2
 import mediapipe as mp
@@ -29,7 +34,9 @@ def setup_logging():
     logger = logging.getLogger("posture")
     logger.setLevel(logging.INFO)
     if not logger.handlers:
-        handler = logging.FileHandler(os.path.join(LOG_DIR, "posture.jsonl"), encoding="utf-8")
+        handler = RotatingFileHandler(
+            os.path.join(LOG_DIR, "posture.jsonl"),
+            maxBytes=2_000_000, backupCount=3, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
     return logger
@@ -120,6 +127,27 @@ class PostureMonitor:
             return False
         return True
 
+    @staticmethod
+    def _open_camera(camera):
+        """打开并配置摄像头：限制分辨率、丢帧预热。失败返回 None。
+
+        - 限制采集分辨率到 640x480：坐姿检测无需高分辨率，可显著降低
+          MediaPipe 每次推理的成本。
+        - BUFFERSIZE=1：避免读到驱动缓冲里的旧帧。
+        - 丢弃前几帧：摄像头冷启动时自动曝光/白平衡未稳定，首帧可能过暗，
+          直接送检会被误判为"无人"。
+        """
+        cap = cv2.VideoCapture(camera)
+        if not cap.isOpened():
+            cap.release()
+            return None
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        for _ in range(5):
+            cap.grab()
+        return cap
+
     def _sleep(self, seconds):
         """可中断的 sleep：每 0.2 秒检查 self.running"""
         end = time.time() + seconds
@@ -133,6 +161,9 @@ class PostureMonitor:
         """主监控循环。阻塞调用，直到 self.running = False。"""
         s = self.settings
         thresholds = s.thresholds
+        # 仅 CLI 模式（无状态回调）才往终端打印状态行；托盘/服务模式下这些
+        # \r 状态行会被重定向进 stdout 日志、积累成上百 MB 的噪音，需抑制。
+        tty = self.on_state_change is None
         log_event(self.logger, "start", thresholds=thresholds, sit_max_minutes=s.sit_max_minutes)
 
         # MediaPipe 初始化
@@ -188,6 +219,12 @@ class PostureMonitor:
         cap = None
         camera_retry_interval = 5
 
+        # --- 动态检测：姿态稳定（人不动）时逐步拉长检测间隔 ---
+        stable_streak = 0          # 连续"姿态几乎未变化"的次数
+        last_pose_details = None   # 上次的角度快照，用于运动判定
+        MOTION_THRESHOLD = 2.5     # 任一角度变化超过此值(度)即视为"动了"，重置间隔
+        DYN_MAX_STREAK = 2         # 退避上限：interval * 2^2 = 4 倍（如 5s→20s）
+
         self.running = True
 
         try:
@@ -199,37 +236,51 @@ class PostureMonitor:
                 else:
                     thresholds = s.thresholds
 
-                # --- 摄像头管理 ---
+                # --- 节流：先判断是否到检测时刻 ---
+                # 坏姿势时缩短检测间隔；否则按姿态稳定度自适应拉长（人不动就少检测）
+                if bad_start_time is not None:
+                    interval = 2.0
+                else:
+                    interval = min(s.interval * (2 ** stable_streak),
+                                   s.interval * (2 ** DYN_MAX_STREAK))
+                wait = interval - (now - last_check_time)
+                if wait > 0:
+                    if self.debug:
+                        # debug 模式保持摄像头开启以连续预览
+                        if cap is None or not cap.isOpened():
+                            cap = self._open_camera(s.camera)
+                        if cap is not None:
+                            cap.grab()
+                            ret, frame = cap.retrieve()
+                            if ret:
+                                cv2.imshow("Sit Monitor (debug)", frame)
+                                if cv2.waitKey(1) & 0xFF == ord("q"):
+                                    break
+                        time.sleep(0.03)
+                    else:
+                        # 非 debug：检测间隔内释放摄像头，不全程独占
+                        # （省电、不与视频通话等争用摄像头、降低 CPU）
+                        if cap is not None:
+                            cap.release()
+                            cap = None
+                        self._sleep(min(wait, 1.0))
+                    continue
+
+                # --- 到检测时刻：确保摄像头已开启 ---
                 if cap is None or not cap.isOpened():
                     if cap is not None:
                         cap.release()
                     if not self.running:
                         break
-                    cap = cv2.VideoCapture(s.camera)
-                    if not cap.isOpened():
-                        cap.release()
-                        cap = None
+                    cap = self._open_camera(s.camera)
+                    if cap is None:
                         self._notify_state("camera_wait")
-                        print(f"\r{t('core.camera_wait'):<80}", end="", flush=True)
+                        if tty:
+                            print(f"\r{t('core.camera_wait'):<80}", end="", flush=True)
                         self._sleep(camera_retry_interval)
                         continue
-                    print(f"\r{t('core.camera_connected'):<80}", end="", flush=True)
-
-                # 坏姿势时缩短检测间隔
-                interval = 2.0 if bad_start_time is not None else s.interval
-                wait = interval - (now - last_check_time)
-                if wait > 0:
-                    if self.debug:
-                        cap.grab()
-                        ret, frame = cap.retrieve()
-                        if ret:
-                            cv2.imshow("Sit Monitor (debug)", frame)
-                            if cv2.waitKey(1) & 0xFF == ord("q"):
-                                break
-                        time.sleep(0.03)
-                    else:
-                        self._sleep(min(wait, 1.0))
-                    continue
+                    if tty:
+                        print(f"\r{t('core.camera_connected'):<80}", end="", flush=True)
 
                 last_check_time = now
 
@@ -291,6 +342,8 @@ class PostureMonitor:
                         _say_proc = None
                     bad_start_time = None
                     present_streak = 0
+                    stable_streak = 0          # 离开即重置，回来时恢复密集检测
+                    last_pose_details = None
                     self.stats.record("away", now)
                     if self.settings.progressive_enabled:
                         from datetime import date
@@ -406,6 +459,24 @@ class PostureMonitor:
                         last_sit_notify_time = now
 
                     is_bad, details, reasons, problem_types = evaluate_posture(lm, thresholds)
+
+                    # --- 运动判定：与上次角度对比，几乎没变就累计 stable_streak ---
+                    _MOTION_KEYS = ("shoulder", "head_tilt", "neck", "torso")
+                    if last_pose_details is None:
+                        moved = True
+                    else:
+                        moved = False
+                        for _k in _MOTION_KEYS:
+                            _a = details.get(_k)
+                            _b = last_pose_details.get(_k)
+                            if (_a is None) != (_b is None):
+                                moved = True  # 关键点可见性变化也算动了
+                                break
+                            if _a is not None and abs(_a - _b) > MOTION_THRESHOLD:
+                                moved = True
+                                break
+                    stable_streak = 0 if moved else min(stable_streak + 1, DYN_MAX_STREAK)
+                    last_pose_details = {_k: details.get(_k) for _k in _MOTION_KEYS}
 
                     # --- 疲劳检测（复用 person_present 阶段的 face_results）---
                     fatigue_level = "normal"
@@ -532,7 +603,8 @@ class PostureMonitor:
                     if self.debug:
                         draw_debug(frame, lm, is_bad, details)
 
-                print(f"\r{status_line:<80}", end="", flush=True)
+                if tty:
+                    print(f"\r{status_line:<80}", end="", flush=True)
 
                 if self.debug:
                     cv2.imshow("Sit Monitor (debug)", frame)
