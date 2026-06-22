@@ -23,6 +23,7 @@ from sit_monitor.tts import speak
 
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
+from sit_monitor.idle import read_input_idle_seconds, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -36,6 +37,20 @@ def setup_logging():
     if not logger.handlers:
         handler = RotatingFileHandler(
             os.path.join(LOG_DIR, "posture.jsonl"),
+            maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+    return logger
+
+
+def setup_event_logging():
+    """深度休眠事件单独写 deepsleep_events.jsonl，与 posture.jsonl 同目录、同轮转策略。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    logger = logging.getLogger("deepsleep")
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        handler = RotatingFileHandler(
+            os.path.join(LOG_DIR, "deepsleep_events.jsonl"),
             maxBytes=2_000_000, backupCount=3, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
@@ -67,6 +82,7 @@ class PostureMonitor:
         self.logger = setup_logging()
         self.stats = Stats()
         self.progression = ProgressionTracker(progression_state_path())
+        self.event_logger = setup_event_logging()
 
     def _notify_state(self, state, **details):
         if self.on_state_change:
@@ -219,6 +235,12 @@ class PostureMonitor:
         cap = None
         camera_retry_interval = 5
 
+        # --- 深度休眠：away 且键鼠长时间空闲时关摄像头、仅轮询键鼠直到唤醒 ---
+        deep_sleep = False
+        deep_sleep_start = 0.0     # 本次休眠进入时刻
+        currently_away = False     # 最近一次检测是否判定无人（供进入判定）
+        away_idle_logged = False   # 本次 away 是否已记 away_idle_snapshot
+
         # --- 动态检测：姿态稳定（人不动）时逐步拉长检测间隔 ---
         stable_streak = 0          # 连续"姿态几乎未变化"的次数
         last_pose_details = None   # 上次的角度快照，用于运动判定
@@ -230,6 +252,19 @@ class PostureMonitor:
         try:
             while self.running:
                 now = time.time()
+                idle_seconds = read_input_idle_seconds()
+
+                # --- 深度休眠处理（在开摄像头之前）---
+                if deep_sleep:
+                    action = deep_sleep_decision(True, currently_away, idle_seconds)
+                    if action == "stay_sleep":
+                        self._sleep(DEEP_SLEEP_POLL_SECONDS)
+                        continue
+                    # action == "wake"：退出休眠，落到下方正常检测路径（会重开摄像头）
+                    deep_sleep = False
+                    log_event(self.event_logger, "deep_sleep_exit",
+                              duration_s=round(now - deep_sleep_start, 1))
+
                 # 运行中实时读取设置（托盘可能已修改）
                 if s.progressive_enabled:
                     thresholds = self.progression.current_thresholds()
@@ -344,6 +379,21 @@ class PostureMonitor:
                     present_streak = 0
                     stable_streak = 0          # 离开即重置，回来时恢复密集检测
                     last_pose_details = None
+                    currently_away = True
+                    if not away_idle_logged:
+                        log_event(self.event_logger, "away_idle_snapshot",
+                                  idle_seconds=idle_seconds)
+                        away_idle_logged = True
+                    # 进入深度休眠：away 且键鼠空闲达门槛
+                    if (not deep_sleep
+                            and deep_sleep_decision(False, True, idle_seconds) == "enter"):
+                        deep_sleep = True
+                        deep_sleep_start = now
+                        log_event(self.event_logger, "deep_sleep_enter",
+                                  idle_seconds=idle_seconds)
+                        if cap is not None:
+                            cap.release()
+                            cap = None
                     self.stats.record("away", now)
                     if self.settings.progressive_enabled:
                         from datetime import date
@@ -412,6 +462,8 @@ class PostureMonitor:
 
                         self._notify_state("away")
                 else:
+                    currently_away = False
+                    away_idle_logged = False
                     present_streak += 1
                     if (s.auto_pause and media_paused
                             and present_streak >= PRESENT_STREAK_REQUIRED
