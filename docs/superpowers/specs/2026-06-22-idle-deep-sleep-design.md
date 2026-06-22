@@ -111,7 +111,39 @@ CGEventSourceSecondsSinceLastEventType(
 - **集成手测**：离开工位 5 分钟 → 摄像头停（指示灯灭）；碰鼠标 → 秒级恢复；
   回来静坐不碰键鼠 → ≤5 分钟被摄像头唤醒。
 
+## 数据收集与评估（backtest）
+
+目的：跑一段时间后量化深度休眠**是否有效**——既要看"省了多少"，也要看"漏检风险
+多大"。注意：进入休眠后期间没有 presence 真值（只 5 分钟瞄一次），无法做严格的
+反事实回放，所以评估是**观测式**：埋足够的事件，事后用脚本聚合。
+
+### 埋点（新增 `deepsleep_events.jsonl`，与 posture.jsonl 同目录、同 RotatingFileHandler 风格）
+
+| 事件 | 字段 |
+|------|------|
+| `deep_sleep_enter` | `ts`, `idle_seconds` |
+| `camera_peek` | `ts`, `found_person`(bool), `idle_seconds` |
+| `deep_sleep_exit` | `ts`, `trigger`("input"\|"camera"), `duration_s`, `num_peeks` |
+| `away_idle_snapshot` | 摄像头刚判定 away 那一刻记一次：`ts`, `idle_seconds`（用于事后调 ENTER_IDLE 门槛） |
+
+摄像头检测频率无需单独埋——每次检测本就写 posture.jsonl，**按小时计数 posture.jsonl
+条数**即可反推检测密度（含休眠前后对比）。
+
+### 评估脚本（`scripts/eval_deep_sleep.py`，纯离线读日志）
+
+读 `deepsleep_events.jsonl` + `posture.jsonl`，输出报告：
+
+- **省电侧**：累计休眠时长、休眠会话数、时长中位/均值；估算"省下的摄像头开启次数"
+  = 休眠时长 ÷ 正常 interval − 实际 peek 次数；休眠前后 **检测条数/小时** 对比。
+- **漏检风险侧**：`deep_sleep_exit` 的 trigger 分布——
+  - `input` 占比高 = 人回来基本都靠碰键鼠即时唤醒，5 分钟兜底很少用上，覆盖缺口小；
+  - `camera` 触发的会话 = 人回来后静坐没碰键鼠，统计这类的**唤醒延迟分布**（最长 ≤300s）。
+- **误进入侧**：进入后很快（如 <30s）就因 input 退出的会话占比——值高说明 ENTER_IDLE
+  偏短、睡早了；用 `away_idle_snapshot` 复算不同门槛（60/120/300s）下的进入时机。
+
+脚本只读日志、不依赖运行中进程，可随时跑（"过一段时间"后执行即可）。
+
 ## 范围与后续
 
-- **本期**：桌面版深度休眠（系统空闲读取 + 三态决策 + core 接入）。
+- **本期**：桌面版深度休眠（系统空闲读取 + 三态决策 + core 接入）+ 评估埋点与离线评估脚本。
 - **后续**：参数提为设置项；网页版用 Page Visibility / `requestIdleCallback` 做类比（YAGNI，暂不做）。
