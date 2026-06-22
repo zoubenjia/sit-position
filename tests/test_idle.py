@@ -40,3 +40,8 @@ def test_wake_failsafe_when_idle_unavailable_in_sleep():
 
 def test_stay_when_still_idle():
     assert deep_sleep_decision(True, False, 400.0) == "stay_sleep"
+
+
+def test_stay_when_idle_equals_wake_threshold():
+    # 唤醒条件是严格 < WAKE_IDLE_SECONDS；等值不唤醒
+    assert deep_sleep_decision(True, False, WAKE_IDLE_SECONDS) == "stay_sleep"
