@@ -27,18 +27,38 @@ def read_input_idle_seconds():
         return None
 
 
-def deep_sleep_decision(in_deep_sleep, is_away, idle_seconds):
+def read_on_ac_power():
+    """是否接通电源（AC）。True=插电, False=电池, None=读不到（非 mac / 异常）。"""
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["pmset", "-g", "batt"], capture_output=True, text=True, timeout=3,
+        ).stdout
+        if "AC Power" in out:
+            return True
+        if "Battery Power" in out:
+            return False
+        return None
+    except Exception:
+        return None
+
+
+def deep_sleep_decision(in_deep_sleep, is_away, idle_seconds, on_ac_power=None):
     """根据当前状态与信号决定动作。
 
     in_deep_sleep: 当前是否已处于深度休眠
     is_away:       最近一次摄像头检测是否判定无人（仅用于"进入"判定）
     idle_seconds:  键鼠空闲秒数；None＝取不到（feature 不可用）
+    on_ac_power:   是否插电；True=AC（深度休眠是省电功能，插电不进入），
+                   False=电池，None=读不到（当作电池，不禁用功能）
 
     返回 "enter" / "wake" / "stay_sleep" / "none"。
     """
     if not in_deep_sleep:
         if idle_seconds is None:
             return "none"  # 取不到空闲 → 永不进入，退回现有行为
+        if on_ac_power is True:
+            return "none"  # 插电：保持正常监控，不为省电牺牲姿势检测
         if is_away and idle_seconds >= ENTER_IDLE_SECONDS:
             return "enter"
         return "none"

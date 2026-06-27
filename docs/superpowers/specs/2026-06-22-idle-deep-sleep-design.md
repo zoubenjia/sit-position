@@ -46,7 +46,10 @@ CGEventSourceSecondsSinceLastEventType(
 
 同时满足：
 1. 主循环当前判定为 **away**（画面连续无人，沿用现有 away 判定）；
-2. 键鼠空闲秒数 ≥ **300s（5 分钟）**。
+2. 键鼠空闲秒数 ≥ **300s（5 分钟）**；
+3. **非 AC 供电**（电池供电）。深度休眠是省电功能，插电时无电池压力，应保持
+   正常监控、不为省电牺牲姿势检测。读不到电源（None）当作电池处理，不禁用功能。
+   注意：台式 Mac 恒为 AC → 永不进入深度休眠（本期接受此后果）。
 
 第 2 条的"且空闲"是**防摄像头误判**的与门：若用户正在打字、摄像头却因光线/遮挡
 误报无人，输入不空闲就不会进深度休眠。
@@ -67,8 +70,10 @@ CGEventSourceSecondsSinceLastEventType(
 
 - **新增纯逻辑模块**（可单测，不依赖真摄像头/真键鼠）：
   - `read_input_idle_seconds() -> float | None`：读系统空闲秒数，失败回 `None`。
-  - 决策函数 `deep_sleep_decision(in_deep_sleep, is_away, idle_seconds) -> action`：
-    输入当前状态 + away + 空闲秒数，输出动作（`enter` / `wake` / `stay_sleep` / `none`）。
+  - `read_on_ac_power() -> bool | None`：读电源（`pmset -g batt` 解析 AC/Battery），失败回 `None`。
+  - 决策函数 `deep_sleep_decision(in_deep_sleep, is_away, idle_seconds, on_ac_power=None) -> action`：
+    输入当前状态 + away + 空闲秒数 + 电源，输出动作（`enter` / `wake` / `stay_sleep` / `none`）。
+    `on_ac_power=True` 时未休眠一律 `none`（不进入）；唤醒逻辑不受电源影响。
     常量：`ENTER_IDLE_SECONDS=300`、`WAKE_IDLE_SECONDS=5`、`DEEP_SLEEP_POLL_SECONDS=2`。
 - **`core.py`（改）**：在主循环顶部接入决策函数——休眠中按动作轮询/唤醒；现有 away
   分支里触发进入。

@@ -23,7 +23,7 @@ from sit_monitor.tts import speak
 
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
-from sit_monitor.idle import read_input_idle_seconds, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
+from sit_monitor.idle import read_input_idle_seconds, read_on_ac_power, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -384,9 +384,10 @@ class PostureMonitor:
                         log_event(self.event_logger, "away_idle_snapshot",
                                   idle_seconds=idle_seconds)
                         away_idle_logged = True
-                    # 进入深度休眠：away 且键鼠空闲达门槛
+                    # 进入深度休眠：away 且键鼠空闲达门槛（且非 AC 供电）
                     if (not deep_sleep
-                            and deep_sleep_decision(False, True, idle_seconds) == "enter"):
+                            and deep_sleep_decision(False, True, idle_seconds,
+                                                    on_ac_power=read_on_ac_power()) == "enter"):
                         deep_sleep = True
                         deep_sleep_start = now
                         log_event(self.event_logger, "deep_sleep_enter",
