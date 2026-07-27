@@ -18,7 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-VERSION = "1.5.2"
+from sit_monitor.version import __version__ as VERSION
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
 
@@ -1147,13 +1147,14 @@ class TrayApp(rumps.App):
         threading.Thread(target=do_update, daemon=True).start()
 
     def _read_disk_version(self):
-        """读取磁盘上源码中的 VERSION，与运行中的 VERSION 比较"""
+        """读取磁盘上源码的版本（pyproject 为单一来源），与运行中的 VERSION 比较。
+
+        用于 git pull 后判断是否需要重启进程加载新代码。
+        """
         try:
-            tray_path = os.path.join(PROJECT_DIR, "sit_monitor", "tray.py")
-            with open(tray_path) as f:
-                for line in f:
-                    if line.startswith("VERSION"):
-                        return line.split('"')[1]
+            import tomllib
+            with open(os.path.join(PROJECT_DIR, "pyproject.toml"), "rb") as f:
+                return tomllib.load(f)["project"]["version"]
         except Exception:
             pass
         return None
