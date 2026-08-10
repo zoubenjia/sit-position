@@ -18,6 +18,9 @@ dependencies = [
     "rumps",
     "httpx>=0.27",
     "certifi",  # mediapipe>=0.10.35 运行时调用 certifi.where()，但未声明此依赖
+    # 深度休眠靠 Quartz 读键鼠空闲秒数。rumps 只拉 pyobjc-framework-Cocoa，
+    # 不含 Quartz——brew 安装环境曾因此 import 失败，深度休眠静默失效。
+    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
 ]
 
 [project.scripts]

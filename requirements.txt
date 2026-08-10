@@ -4,6 +4,7 @@ numpy
 Pillow
 mcp>=1.0.0
 rumps; sys_platform == "darwin"
+pyobjc-framework-Quartz; sys_platform == "darwin"  # 深度休眠读键鼠空闲
 pystray; sys_platform == "win32"
 winotify; sys_platform == "win32"
 pyttsx3; sys_platform == "win32"
