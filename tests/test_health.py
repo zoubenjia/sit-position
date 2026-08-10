@@ -61,3 +61,22 @@ def test_watchdog_triggers_when_never_produced_events():
     """
     # 以启动时刻计时、已超过阈值 → 必须重启
     assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, 0) == "restart"
+
+
+# ── 黑帧防御：相机刚重开时自动曝光未启动，帧接近全黑 ──
+from sit_monitor.health import is_frame_too_dark, DARK_FRAME_THRESHOLD
+
+
+def test_dark_frame_detected():
+    # 实测：反复开关相机、预热不足时亮度仅 1~3，MediaPipe 必然检测不到人
+    assert is_frame_too_dark(2.0) is True
+
+
+def test_normal_frame_not_dark():
+    # 实测：预热充分时亮度约 30~40
+    assert is_frame_too_dark(35.8) is False
+
+
+def test_dark_frame_threshold_boundary():
+    assert is_frame_too_dark(DARK_FRAME_THRESHOLD) is False
+    assert is_frame_too_dark(DARK_FRAME_THRESHOLD - 0.1) is True

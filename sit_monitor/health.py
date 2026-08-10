@@ -49,3 +49,16 @@ def watchdog_action(monitor_running, seconds_since_last_event, restart_count):
     if restart_count >= WATCHDOG_MAX_RESTARTS:
         return "give_up"
     return "restart"
+
+
+# 帧平均亮度低于此值视为"相机尚未就绪的黑帧"，不可用于姿势判定。
+# 实测（M4 MacBook 内置摄像头，反复 open/release）：
+#   预热 grab5 立即读 → 亮度 1.1~1.8（几乎全黑，MediaPipe 0/8 检测到人）
+#   预热 grab10+等0.5s → 亮度 34~37（与相机常开时的 35.8 一致）
+# 取 15 作门槛：明显高于黑帧、明显低于正常曝光，暗光环境也不至于误伤。
+DARK_FRAME_THRESHOLD = 15.0
+
+
+def is_frame_too_dark(mean_brightness):
+    """帧是否因相机未就绪而过暗（此时不能判定"无人"，否则会误报 away）。"""
+    return mean_brightness < DARK_FRAME_THRESHOLD

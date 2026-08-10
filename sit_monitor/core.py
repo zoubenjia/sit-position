@@ -24,7 +24,7 @@ from sit_monitor.tts import speak
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
 from sit_monitor.idle import read_input_idle_seconds, read_on_ac_power, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
-from sit_monitor.health import camera_failure_action
+from sit_monitor.health import camera_failure_action, is_frame_too_dark
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -161,8 +161,12 @@ class PostureMonitor:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        for _ in range(5):
+        # 预热：相机刚打开时自动曝光尚未启动，帧几乎全黑（实测亮度 1~3），
+        # MediaPipe 必然检测不到人 → 误判"无人"。实测 grab5 立即读远远不够，
+        # grab10 + 等 0.5s 才能达到常开相机的亮度水平（~36）。
+        for _ in range(10):
             cap.grab()
+        time.sleep(0.5)
         return cap
 
     def _sleep(self, seconds):
@@ -237,6 +241,7 @@ class PostureMonitor:
         camera_retry_interval = 5
         camera_fail_streak = 0     # 相机连续打开失败次数
         camera_alerted = False     # 本轮相机故障是否已告警（恢复后清零）
+        dark_frame_streak = 0      # 连续读到过暗（相机未就绪）帧的次数
 
         # --- 深度休眠：away 且键鼠长时间空闲时关摄像头、仅轮询键鼠直到唤醒 ---
         deep_sleep = False
@@ -345,6 +350,18 @@ class PostureMonitor:
                     if not self.running:
                         break
                     continue
+
+                # 黑帧防御：相机未就绪时的暗帧不能用于判定，否则会误报"无人"
+                if is_frame_too_dark(float(frame.mean())):
+                    dark_frame_streak += 1
+                    if dark_frame_streak in (5, 50):   # 偶发不吵，持续才记
+                        log_event(self.logger, "dark_frame",
+                                  streak=dark_frame_streak,
+                                  brightness=round(float(frame.mean()), 1))
+                    cap.release()
+                    cap = None          # 下次重开并重新预热
+                    continue
+                dark_frame_streak = 0
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
