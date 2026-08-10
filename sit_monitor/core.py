@@ -24,6 +24,7 @@ from sit_monitor.tts import speak
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
 from sit_monitor.idle import read_input_idle_seconds, read_on_ac_power, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
+from sit_monitor.health import camera_failure_action
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -234,6 +235,8 @@ class PostureMonitor:
         current_stance = "sitting"  # sitting 或 standing
         cap = None
         camera_retry_interval = 5
+        camera_fail_streak = 0     # 相机连续打开失败次数
+        camera_alerted = False     # 本轮相机故障是否已告警（恢复后清零）
 
         # --- 深度休眠：away 且键鼠长时间空闲时关摄像头、仅轮询键鼠直到唤醒 ---
         deep_sleep = False
@@ -245,7 +248,9 @@ class PostureMonitor:
         stable_streak = 0          # 连续"姿态几乎未变化"的次数
         last_pose_details = None   # 上次的角度快照，用于运动判定
         MOTION_THRESHOLD = 2.5     # 任一角度变化超过此值(度)即视为"动了"，重置间隔
-        DYN_MAX_STREAK = 2         # 退避上限：interval * 2^2 = 4 倍（如 5s→20s）
+        DYN_MAX_STREAK = 1         # 退避上限：interval * 2^1 = 2 倍（5s→10s）。
+                                   # 曾设 2（→20s），姿势变化后最坏要等 20s 图标才更新，
+                                   # 用户反馈"图标更新不及时"，折中为 10s 兼顾省电与响应。
 
         self.running = True
 
@@ -309,11 +314,24 @@ class PostureMonitor:
                         break
                     cap = self._open_camera(s.camera)
                     if cap is None:
-                        self._notify_state("camera_wait")
+                        # 相机连续打不开（如权限被拒）要主动告警，不能静默重试：
+                        # 曾因此静默 9 天无监控而无人察觉。
+                        camera_fail_streak += 1
+                        if camera_failure_action(camera_fail_streak,
+                                                 camera_alerted) == "alert":
+                            camera_alerted = True
+                            log_event(self.logger, "camera_error",
+                                      consecutive_failures=camera_fail_streak)
+                            self._notify_state("camera_error",
+                                               failures=camera_fail_streak)
+                        else:
+                            self._notify_state("camera_wait")
                         if tty:
                             print(f"\r{t('core.camera_wait'):<80}", end="", flush=True)
                         self._sleep(camera_retry_interval)
                         continue
+                    camera_fail_streak = 0
+                    camera_alerted = False
                     if tty:
                         print(f"\r{t('core.camera_connected'):<80}", end="", flush=True)
 

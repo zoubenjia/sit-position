@@ -193,6 +193,7 @@ _SYM_COLOR = {
     "arrow_left": _ORANGE, "arrow_right": _ORANGE, "arrow_up": _ORANGE,
     "shoulder": _ORANGE, "shoulder_left": _ORANGE, "shoulder_right": _ORANGE,
     "clock": _RED, "moon": _RED,
+    "alert": _RED,
     "exercise": _BLUE,
     "gray": _GRAY,
 }
@@ -254,6 +255,14 @@ def _sym_idle(d, s, w):
     d.ellipse([_sp(s, cx - r, cy - r), _sp(s, cx + r, cy + r)], outline=_GRAY, width=w)
 
 
+def _sym_alert(d, s, color, w):
+    """感叹号：故障态（相机不可用/监控僵死），必须区别于灰色待机。"""
+    cx = 22.0
+    d.line([_sp(s, cx, 8.0), _sp(s, cx, 26.0)], fill=color, width=w + 2)
+    r = max(1.5, 2.5)
+    d.ellipse([_sp(s, cx - r, 32.0 - r), _sp(s, cx + r, 32.0 + r)], fill=color)
+
+
 def generate_symbol(size: int, symbol: str) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -273,6 +282,8 @@ def generate_symbol(size: int, symbol: str) -> Image.Image:
         _sym_clock(d, s, color, w)
     elif symbol == "moon":
         _sym_moon(d, s, color)
+    elif symbol == "alert":
+        _sym_alert(d, s, color, w)
     elif symbol == "exercise":
         _draw_pushup(d, size, _BLUE)
     else:

@@ -175,6 +175,30 @@ def _run_preview(args):
     cv2.destroyAllWindows()
 
 
+def _warn_if_brew_service_installed():
+    """源码实例抢锁会挡住 brew 自启版，这里主动拦一道。
+
+    历史教训：登录时被终端会话恢复拉起的源码实例先占了单实例锁，
+    brew 的 LaunchAgent(KeepAlive) 每次启动都被挡下（日志刷"已在运行"），
+    而那个源码实例还僵死过 9 天——用户以为程序在跑，其实早就没监控了。
+    设 SITMONITOR_ALLOW_DUP=1 可跳过（明确知道自己在做什么时）。
+    """
+    from sit_monitor.paths import is_bundled
+    if is_bundled() or os.environ.get("SITMONITOR_ALLOW_DUP"):
+        return
+    # 只有从项目源码跑才检查（brew 版的可执行文件不在项目目录下）
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.exists(os.path.join(here, "pyproject.toml")):
+        return
+    plist = os.path.expanduser("~/Library/LaunchAgents/homebrew.mxcl.sit-monitor.plist")
+    if os.path.exists(plist):
+        print("检测到 brew 版自启已安装（homebrew.mxcl.sit-monitor）。")
+        print("从源码再起一个实例会抢占单实例锁、把 brew 版挡在门外。")
+        print("如需管理请用：sit-monitor-service {start|stop}")
+        print("确实要用源码实例，请先 sit-monitor-service stop，或设 SITMONITOR_ALLOW_DUP=1。")
+        sys.exit(1)
+
+
 def _acquire_lock():
     """确保只有一个 sit_monitor 实例运行（posture 模式）。
 
@@ -182,6 +206,8 @@ def _acquire_lock():
     """
     import fcntl
     import tempfile
+
+    _warn_if_brew_service_installed()
 
     lock_path = os.path.join(tempfile.gettempdir(), "sit_monitor.lock")
     lock_file = open(lock_path, "w")

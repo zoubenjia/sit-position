@@ -18,6 +18,10 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
+from sit_monitor.health import watchdog_action, WATCHDOG_MAX_RESTARTS, WATCHDOG_STALE_SECONDS
+
+# give_up 后只弹一次失败通知的哨兵值
+WATCHDOG_MAX_RESTARTS_NOTIFIED = WATCHDOG_MAX_RESTARTS + 1
 from sit_monitor.version import __version__ as VERSION
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
@@ -61,6 +65,9 @@ class TrayApp(rumps.App):
         self._ui_timer = None       # UI 刷新定时器引用（睡眠唤醒后用于重建）
         self._wake_observer = None  # 系统唤醒通知观察者
         self._activity_token = None  # NSProcessInfo 活动断言（禁 App Nap，须保活）
+        self._last_event_ts = None      # 上次收到检测状态的时间（看门狗用）
+        self._watchdog_restarts = 0     # 连续自动重启次数
+        self._camera_error_notified = False
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         # Cloud
@@ -317,6 +324,8 @@ class TrayApp(rumps.App):
         优先级：运动 > 待机 > 疲劳 > 久坐 > 姿势偏 > 好。"""
         if state == "exercise":
             return "exercise"
+        if state == "camera_error":
+            return "alert"   # 故障必须可见，不能伪装成灰色待机
         if state in ("stopped", "away", "camera_wait", "camera_adjust"):
             return "gray"
         fatigue = details.get("fatigue") or {}
@@ -354,18 +363,61 @@ class TrayApp(rumps.App):
         self._state = state
         self._details = details
         self._ui_dirty = True
+        # 心跳：只有真正完成一次检测的状态才算"活着"，
+        # camera_wait/camera_error 是故障态，不能刷新心跳（否则看门狗永远不触发）。
+        if state in ("good", "bad", "away", "camera_adjust"):
+            self._last_event_ts = time.time()
+            self._watchdog_restarts = 0
+            self._camera_error_notified = False
 
     def _poll_ui_update(self, _):
         """主线程定时器：安全地更新 UI"""
         # 进度/进阶通知不受 _ui_dirty 限制：跨天进阶可能发生在稳态期间，
         # 在主线程 pop 事件可避免跨线程调 AppKit。
         self._update_progress_menu()
+        self._check_health()
         if not self._ui_dirty:
             return
         self._ui_dirty = False
         self._set_icon(self._state, self._details)
         self._update_stats_menu()
         self._update_posture_hint(self._state, self._details)
+
+    def _check_health(self):
+        """健康自检（主线程）：相机故障告警 + 监控僵死自愈。
+
+        修复 2026-08-01 事故：相机权限被拒后监控静默停摆 9 天，
+        进程还活着所以 launchd 不重启、图标停在旧状态所以用户看不出来。
+        """
+        # 相机故障：core 上报 camera_error 时告警一次
+        if self._state == "camera_error" and not self._camera_error_notified:
+            self._camera_error_notified = True
+            rumps.notification("Sit Monitor", t("tray.notify.camera_error_title"),
+                               t("tray.notify.camera_error_msg"))
+            return
+
+        # 看门狗：监控该在跑却长时间没有新检测事件 = 僵死
+        since = None
+        if self._last_event_ts is not None:
+            since = time.time() - self._last_event_ts
+        action = watchdog_action(self._is_running(), since, self._watchdog_restarts)
+        if action == "restart":
+            self._watchdog_restarts += 1
+            log.warning("watchdog: no detection for %.0fs, restarting monitor (attempt %d)",
+                        since or 0, self._watchdog_restarts)
+            rumps.notification("Sit Monitor", t("tray.notify.watchdog_title"),
+                               t("tray.notify.watchdog_msg", seconds=int(since or 0)))
+            self._last_event_ts = time.time()   # 给重启留出观察窗口
+            try:
+                self._stop_monitor()
+                self._start_monitor()
+            except Exception:
+                log.exception("watchdog restart failed")
+        elif action == "give_up":
+            self._watchdog_restarts += 1   # 只告警一次后不再刷
+            if self._watchdog_restarts == WATCHDOG_MAX_RESTARTS_NOTIFIED:
+                rumps.notification("Sit Monitor", t("tray.notify.watchdog_failed_title"),
+                                   t("tray.notify.watchdog_failed_msg"))
 
     def _update_progress_menu(self):
         mon = self.monitor
@@ -421,6 +473,8 @@ class TrayApp(rumps.App):
                 self._mi_hint.title = t("tray.hint.camera_adjust_direction", direction=direction)
             else:
                 self._mi_hint.title = t("tray.hint.camera_adjust")
+        elif state == "camera_error":
+            self._mi_hint.title = t("tray.hint.camera_error")
         elif state == "camera_wait":
             self._mi_hint.title = t("tray.hint.camera_wait")
         elif state == "stopped":
@@ -469,6 +523,10 @@ class TrayApp(rumps.App):
             return
         self.monitor_thread = threading.Thread(target=self.monitor.run, daemon=True)
         self.monitor_thread.start()
+        # 以启动时刻作为心跳基准：否则监控若从一开始就产不出事件
+        # （相机始终打不开等），_last_event_ts 永远是 None，看门狗永不触发——
+        # 恰好漏掉最需要它的场景。
+        self._last_event_ts = time.time()
 
     def _stop_monitor(self):
         if self.monitor:
