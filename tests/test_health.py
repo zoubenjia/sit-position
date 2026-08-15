@@ -80,3 +80,19 @@ def test_normal_frame_not_dark():
 def test_dark_frame_threshold_boundary():
     assert is_frame_too_dark(DARK_FRAME_THRESHOLD) is False
     assert is_frame_too_dark(DARK_FRAME_THRESHOLD - 0.1) is True
+
+
+# ── 放弃后不得永久躺平：冷却期过后仍要再试（实测缺口）──
+from sit_monitor.health import WATCHDOG_COOLDOWN_SECONDS
+
+
+def test_watchdog_retries_after_cooldown():
+    """2026-08-15 实测缺口：相机 10:05 故障，看门狗快速重启 3 次后 give_up，
+    但相机 10 分钟后就恢复了，监控却一直躺到 13:15 人工干预。
+    达到重启上限后应转为长间隔重试，而不是永久放弃。"""
+    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS, WATCHDOG_MAX_RESTARTS) == "restart"
+
+
+def test_watchdog_still_gives_up_within_cooldown():
+    # 冷却期内不重启，避免快速重启循环
+    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS - 1, WATCHDOG_MAX_RESTARTS) == "give_up"

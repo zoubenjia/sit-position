@@ -13,7 +13,8 @@
 
 CAMERA_FAIL_ALERT_THRESHOLD = 3    # 连续打不开几次才告警（避免瞬时抖动误报）
 WATCHDOG_STALE_SECONDS = 180.0     # 监控在跑却这么久没有新检测事件 = 僵死
-WATCHDOG_MAX_RESTARTS = 3          # 连续自动重启上限，超过只告警
+WATCHDOG_MAX_RESTARTS = 3          # 快速重启上限，超过转入冷却期
+WATCHDOG_COOLDOWN_SECONDS = 900.0  # 冷却期：放弃快速重启后每 15 分钟再试一次
 
 
 def camera_failure_action(consecutive_failures, already_alerted):
@@ -47,6 +48,11 @@ def watchdog_action(monitor_running, seconds_since_last_event, restart_count):
     if seconds_since_last_event < WATCHDOG_STALE_SECONDS:
         return "ok"
     if restart_count >= WATCHDOG_MAX_RESTARTS:
+        # 不能永久躺平：故障（如相机被占）往往几分钟后自行恢复。
+        # 实测 2026-08-15：快速重启 3 次后放弃，相机 10 分钟后就好了，
+        # 监控却一直停到 3 小时后人工干预。改为冷却期后继续低频重试。
+        if seconds_since_last_event >= WATCHDOG_COOLDOWN_SECONDS:
+            return "restart"
         return "give_up"
     return "restart"
 

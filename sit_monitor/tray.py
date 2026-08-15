@@ -18,10 +18,7 @@ from sit_monitor.settings import Settings
 
 log = logging.getLogger(__name__)
 
-from sit_monitor.health import watchdog_action, WATCHDOG_MAX_RESTARTS, WATCHDOG_STALE_SECONDS
-
-# give_up 后只弹一次失败通知的哨兵值
-WATCHDOG_MAX_RESTARTS_NOTIFIED = WATCHDOG_MAX_RESTARTS + 1
+from sit_monitor.health import watchdog_action, WATCHDOG_STALE_SECONDS
 from sit_monitor.version import __version__ as VERSION
 REPO_URL = "https://github.com/zoubenjia/sit-position"
 from sit_monitor.paths import is_bundled, project_dir, assets_dir, python_executable
@@ -67,6 +64,7 @@ class TrayApp(rumps.App):
         self._activity_token = None  # NSProcessInfo 活动断言（禁 App Nap，须保活）
         self._last_event_ts = None      # 上次收到检测状态的时间（看门狗用）
         self._watchdog_restarts = 0     # 连续自动重启次数
+        self._watchdog_gave_up = False  # 是否已进入冷却期（告警只发一次）
         self._camera_error_notified = False
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
@@ -368,6 +366,7 @@ class TrayApp(rumps.App):
         if state in ("good", "bad", "away", "camera_adjust"):
             self._last_event_ts = time.time()
             self._watchdog_restarts = 0
+            self._watchdog_gave_up = False
             self._camera_error_notified = False
 
     def _poll_ui_update(self, _):
@@ -403,6 +402,7 @@ class TrayApp(rumps.App):
         action = watchdog_action(self._is_running(), since, self._watchdog_restarts)
         if action == "restart":
             self._watchdog_restarts += 1
+            self._watchdog_gave_up = False
             log.warning("watchdog: no detection for %.0fs, restarting monitor (attempt %d)",
                         since or 0, self._watchdog_restarts)
             rumps.notification("Sit Monitor", t("tray.notify.watchdog_title"),
@@ -414,8 +414,10 @@ class TrayApp(rumps.App):
             except Exception:
                 log.exception("watchdog restart failed")
         elif action == "give_up":
-            self._watchdog_restarts += 1   # 只告警一次后不再刷
-            if self._watchdog_restarts == WATCHDOG_MAX_RESTARTS_NOTIFIED:
+            # 冷却期内：不重启也不刷计数，只在进入冷却时告警一次。
+            # （冷却期满 watchdog_action 会重新返回 restart，故障恢复后能自愈）
+            if not self._watchdog_gave_up:
+                self._watchdog_gave_up = True
                 rumps.notification("Sit Monitor", t("tray.notify.watchdog_failed_title"),
                                    t("tray.notify.watchdog_failed_msg"))
 
