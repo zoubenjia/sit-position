@@ -14,7 +14,7 @@ v1.5.3 发版漏改后者 → 运行中报 1.5.2、磁盘是 1.5.3 → app 反�
 import os
 
 # 打包模式的兜底值；发版时随 pyproject 一起更新。
-_FALLBACK_VERSION = "1.5.4"
+_FALLBACK_VERSION = "1.5.5"
 
 
 def get_version():

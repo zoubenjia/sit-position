@@ -4,14 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sit-monitor"
-version = "1.5.4"
+version = "1.5.5"
 description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Benjia Zou" }]
 dependencies = [
-    "mediapipe",
+    # mediapipe 必须 <1.0：1.0.1 在 macOS 上 Metal/GPU 初始化直接 FATAL
+    # （graph_service.h "Check failed: service_ Service is unavailable"），
+    # 进程启动即崩、被 KeepAlive 反复拉起（实测 2026-08-15 崩了 48 次）。
+    # 0.10.32 长期验证可用。
+    "mediapipe>=0.10.32,<1.0",
     "opencv-python",
     "numpy",
     "Pillow",
