@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sit-monitor"
-version = "1.5.7"
+version = "1.5.8"
 description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,15 +15,19 @@ dependencies = [
     # （graph_service.h "Check failed: service_ Service is unavailable"），
     # 进程启动即崩、被 KeepAlive 反复拉起（实测 2026-08-15 崩了 48 次）。
     # 0.10.32 长期验证可用。
-    "mediapipe>=0.10.32,<1.0",
-    # ★ 以下二进制包必须钉上限。macOS 的 AMFI 会拒绝加载 adhoc 签名的新版
-    # wheel（amfid: "not valid ... adhoc signed or signed by an unknown
-    # certificate chain"），进程被 SIGKILL 闪退、launchd 反复拉起。
-    # 实测 2026-09-08：opencv 5.0.0.93 / Pillow 12.3.0 / numpy 2.5.3 全部被杀；
-    # 下列版本长期验证可用。升级这些包前务必先实测 import 不被 SIGKILL。
-    "opencv-python>=4.13,<5.0",
-    "numpy>=2.4,<2.5",
-    "Pillow>=12.1,<12.3",
+    # ★★ 以下二进制包必须钉「确切版本」，不能用范围。
+    # macOS 的 AMFI 拒绝加载这些 wheel 里 adhoc 签名的 .so/.dylib
+    #   amfid: "not valid ... adhoc signed or signed by an unknown certificate chain"
+    # 加载即 SIGKILL，进程闪退、launchd 反复拉起（launchctl status=-9）。
+    # 实测 2026-09-08 被杀：opencv 5.0.0.93 / 4.14.0.94、Pillow 12.3.0 / 12.2.0、
+    # numpy 2.5.3 / 2.4.6、mediapipe 0.10.35 —— 注意范围约束不管用，
+    # 范围内较新的版本同样被杀，只有下面这组确切版本长期验证可用。
+    # 升级任何一个之前，必须先实测 `python -c "import cv2, PIL.Image, mediapipe"`
+    # 不被 SIGKILL（exit 137）。
+    "mediapipe==0.10.32",
+    "opencv-python==4.13.0.92",
+    "numpy==2.4.2",
+    "Pillow==12.1.1",
     "rumps",
     "httpx>=0.27",
     "certifi",  # mediapipe>=0.10.35 运行时调用 certifi.where()，但未声明此依赖

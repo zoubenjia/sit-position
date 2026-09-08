@@ -1,7 +1,7 @@
-mediapipe>=0.10.32,<1.0  # 1.0.1 在 macOS Metal 初始化 FATAL
-opencv-python>=4.13,<5.0  # 5.x adhoc 签名被 AMFI 拒绝→SIGKILL
-numpy>=2.4,<2.5  # 同上
-Pillow>=12.1,<12.3  # 同上
+mediapipe==0.10.32  # 确切版本：新版 .so 被 AMFI 拒绝→SIGKILL
+opencv-python==4.13.0.92  # 同上（4.14 也被杀，范围约束不管用）
+numpy==2.4.2  # 同上
+Pillow==12.1.1  # 同上
 mcp>=1.0.0
 rumps; sys_platform == "darwin"
 pyobjc-framework-Quartz; sys_platform == "darwin"  # 深度休眠读键鼠空闲
