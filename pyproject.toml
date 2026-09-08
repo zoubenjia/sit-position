@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sit-monitor"
-version = "1.5.6"
+version = "1.5.7"
 description = "坐姿监控程序 - 使用摄像头检测不良坐姿并发送系统通知"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,9 +16,14 @@ dependencies = [
     # 进程启动即崩、被 KeepAlive 反复拉起（实测 2026-08-15 崩了 48 次）。
     # 0.10.32 长期验证可用。
     "mediapipe>=0.10.32,<1.0",
-    "opencv-python",
-    "numpy",
-    "Pillow",
+    # ★ 以下二进制包必须钉上限。macOS 的 AMFI 会拒绝加载 adhoc 签名的新版
+    # wheel（amfid: "not valid ... adhoc signed or signed by an unknown
+    # certificate chain"），进程被 SIGKILL 闪退、launchd 反复拉起。
+    # 实测 2026-09-08：opencv 5.0.0.93 / Pillow 12.3.0 / numpy 2.5.3 全部被杀；
+    # 下列版本长期验证可用。升级这些包前务必先实测 import 不被 SIGKILL。
+    "opencv-python>=4.13,<5.0",
+    "numpy>=2.4,<2.5",
+    "Pillow>=12.1,<12.3",
     "rumps",
     "httpx>=0.27",
     "certifi",  # mediapipe>=0.10.35 运行时调用 certifi.where()，但未声明此依赖
