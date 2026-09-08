@@ -23,8 +23,10 @@ from sit_monitor.tts import speak
 
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
-from sit_monitor.idle import read_input_idle_seconds, read_on_ac_power, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS
-from sit_monitor.health import camera_failure_action, is_frame_too_dark
+from sit_monitor.idle import (read_input_idle_seconds, read_on_ac_power, read_power_state,
+                              deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS)
+from sit_monitor.health import (camera_failure_action, is_frame_too_dark,
+                                power_mode, power_adjusted_interval)
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -84,6 +86,9 @@ class PostureMonitor:
         self.stats = Stats()
         self.progression = ProgressionTracker(progression_state_path())
         self.event_logger = setup_event_logging()
+        # 电量分级模式，由主循环更新、tray 轮询读取（不走 on_state_change，
+        # 那是姿势状态通道，混用会把菜单栏图标顶掉）
+        self.power_state = "normal"
 
     def _notify_state(self, state, **details):
         if self.on_state_change:
@@ -242,6 +247,8 @@ class PostureMonitor:
         camera_fail_streak = 0     # 相机连续打开失败次数
         camera_alerted = False     # 本轮相机故障是否已告警（恢复后清零）
         dark_frame_streak = 0      # 连续读到过暗（相机未就绪）帧的次数
+        power_state = "normal"     # 电量分级模式：normal/saver/critical
+        last_power_check = 0.0     # 上次读电量的时刻（pmset 是子进程，别每轮都调）
 
         # --- 深度休眠：away 且键鼠长时间空闲时关摄像头、仅轮询键鼠直到唤醒 ---
         deep_sleep = False
@@ -281,13 +288,28 @@ class PostureMonitor:
                 else:
                     thresholds = s.thresholds
 
+                # --- 电量分级：低电量时降频，把电留给用户干活 ---
+                # pmset 是子进程调用，每 60s 查一次足够（电量变化很慢）
+                if now - last_power_check >= 60.0:
+                    last_power_check = now
+                    battery_pct, on_ac = read_power_state()
+                    new_mode = power_mode(battery_pct, on_ac, power_state)
+                    if new_mode != power_state:
+                        log_event(self.logger, "power_mode",
+                                  mode=new_mode, previous=power_state,
+                                  battery=battery_pct, on_ac=on_ac)
+                        power_state = new_mode
+                        self.power_state = new_mode
+
                 # --- 节流：先判断是否到检测时刻 ---
                 # 坏姿势时缩短检测间隔；否则按姿态稳定度自适应拉长（人不动就少检测）
-                if bad_start_time is not None:
+                bad_active = bad_start_time is not None
+                if bad_active:
                     interval = 2.0
                 else:
                     interval = min(s.interval * (2 ** stable_streak),
                                    s.interval * (2 ** DYN_MAX_STREAK))
+                interval = power_adjusted_interval(power_state, interval, bad_active)
                 wait = interval - (now - last_check_time)
                 if wait > 0:
                     if self.debug:

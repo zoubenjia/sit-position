@@ -68,3 +68,65 @@ DARK_FRAME_THRESHOLD = 15.0
 def is_frame_too_dark(mean_brightness):
     """帧是否因相机未就绪而过暗（此时不能判定"无人"，否则会误报 away）。"""
     return mean_brightness < DARK_FRAME_THRESHOLD
+
+
+# ── 电量分级策略 ──────────────────────────────────────────────
+# 实测（2026-09-08，M4 MacBook）：常驻监控平均占用 17.8% CPU，
+# 每 5.8s 开一次摄像头跑一轮推理，坏姿势时加密到 2s 一轮——对电池是实打实的负担。
+# 低电量时按级降频，把电留给用户干活。
+#
+# 进入/退出用不同阈值（滞回）：否则电量在阈值附近浮动会反复切换模式。
+POWER_SAVER_ENTER = 20      # ≤此电量进入省电
+POWER_SAVER_EXIT = 25       # 回升到此电量才退出省电
+POWER_CRITICAL_ENTER = 10   # ≤此电量进入极低频
+POWER_CRITICAL_EXIT = 15    # 回升到此电量才退出极低频
+
+CRITICAL_INTERVAL_SECONDS = 60.0  # 极低频模式的固定检测间隔
+SAVER_BAD_INTERVAL = 5.0          # 省电模式下坏姿势的加密间隔（正常是 2s）
+
+
+def power_mode(battery_percent, on_ac_power, current_mode="normal"):
+    """按电量决定运行模式："normal" / "saver" / "critical"。
+
+    battery_percent: 电量百分比；None＝读不到
+    on_ac_power:     是否插电（True 立即回正常，省电功能对插电无意义）
+    current_mode:    当前所处模式，用于滞回判定
+
+    低电量不完全停止监控——恰恰是赶工时最容易含胸驼背，
+    故降到极低频兜底而非彻底让路。
+    """
+    if on_ac_power is True:
+        return "normal"
+    if battery_percent is None:
+        return "normal"   # 读不到电量不擅自降级行为
+
+    p = battery_percent
+    # critical 判定（已在其中则用退出阈值）
+    if current_mode == "critical":
+        if p < POWER_CRITICAL_EXIT:
+            return "critical"
+    elif p <= POWER_CRITICAL_ENTER:
+        return "critical"
+
+    # saver 判定（从 critical 回升也先降到 saver，逐级恢复）
+    if current_mode in ("saver", "critical"):
+        if p < POWER_SAVER_EXIT:
+            return "saver"
+    elif p <= POWER_SAVER_ENTER:
+        return "saver"
+
+    return "normal"
+
+
+def power_adjusted_interval(mode, normal_interval, bad_active):
+    """按电源模式调整检测间隔。
+
+    mode:            power_mode() 的结果
+    normal_interval: 正常模式下算出的间隔（含动态退避）
+    bad_active:      当前是否处于坏姿势加密状态
+    """
+    if mode == "critical":
+        return CRITICAL_INTERVAL_SECONDS
+    if mode == "saver":
+        return SAVER_BAD_INTERVAL if bad_active else normal_interval * 2
+    return normal_interval

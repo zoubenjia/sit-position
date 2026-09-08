@@ -66,6 +66,7 @@ class TrayApp(rumps.App):
         self._watchdog_restarts = 0     # 连续自动重启次数
         self._watchdog_gave_up = False  # 是否已进入冷却期（告警只发一次）
         self._camera_error_notified = False
+        self._power_state_seen = "normal"   # 上次通知过的电源模式
         self._last_daily_report_date = None
         self._auto_update_hours = 12  # 自动检查更新间隔（小时）
         # Cloud
@@ -375,12 +376,35 @@ class TrayApp(rumps.App):
         # 在主线程 pop 事件可避免跨线程调 AppKit。
         self._update_progress_menu()
         self._check_health()
+        self._check_power_mode()
         if not self._ui_dirty:
             return
         self._ui_dirty = False
         self._set_icon(self._state, self._details)
         self._update_stats_menu()
         self._update_posture_hint(self._state, self._details)
+
+    def _check_power_mode(self):
+        """电源模式变化时通知用户（行为变了必须让用户知道）。"""
+        mon = self.monitor
+        if not mon:
+            return
+        mode = getattr(mon, "power_state", "normal")
+        if mode == self._power_state_seen:
+            return
+        self._power_state_seen = mode
+        battery = "?"
+        try:
+            from sit_monitor.idle import read_power_state
+            pct, _ = read_power_state()
+            if pct is not None:
+                battery = pct
+        except Exception:
+            pass
+        key = {"saver": "power_saver", "critical": "power_critical"}.get(mode, "power_normal")
+        rumps.notification("Sit Monitor",
+                           t(f"tray.notify.{key}_title"),
+                           t(f"tray.notify.{key}_msg", battery=battery))
 
     def _check_health(self):
         """健康自检（主线程）：相机故障告警 + 监控僵死自愈。

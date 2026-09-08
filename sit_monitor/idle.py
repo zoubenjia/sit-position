@@ -69,3 +69,28 @@ def deep_sleep_decision(in_deep_sleep, is_away, idle_seconds, on_ac_power=None):
     if idle_seconds < WAKE_IDLE_SECONDS:
         return "wake"  # 刚有键鼠输入
     return "stay_sleep"
+
+
+def read_power_state():
+    """一次 pmset 调用取回 (电量百分比, 是否插电)。
+
+    分开调 read_on_ac_power/读电量会 fork 两次 pmset，主循环里没必要。
+    取不到返回 (None, None)。
+    """
+    try:
+        import re
+        import subprocess
+        out = subprocess.run(
+            ["pmset", "-g", "batt"], capture_output=True, text=True, timeout=3,
+        ).stdout
+        m = re.search(r"(\d+)%", out)
+        pct = int(m.group(1)) if m else None
+        if "AC Power" in out:
+            ac = True
+        elif "Battery Power" in out:
+            ac = False
+        else:
+            ac = None
+        return pct, ac
+    except Exception:
+        return None, None

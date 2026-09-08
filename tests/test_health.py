@@ -96,3 +96,72 @@ def test_watchdog_retries_after_cooldown():
 def test_watchdog_still_gives_up_within_cooldown():
     # 冷却期内不重启，避免快速重启循环
     assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS - 1, WATCHDOG_MAX_RESTARTS) == "give_up"
+
+
+# ── 电量分级策略（带滞回，防阈值附近抖动）──
+from sit_monitor.health import (
+    power_mode, power_adjusted_interval,
+    POWER_SAVER_ENTER, POWER_SAVER_EXIT,
+    POWER_CRITICAL_ENTER, POWER_CRITICAL_EXIT,
+    CRITICAL_INTERVAL_SECONDS, SAVER_BAD_INTERVAL,
+)
+
+
+def test_ac_power_always_normal():
+    # 插电立即恢复正常，无论电量多低
+    assert power_mode(5, True, "critical") == "normal"
+
+
+def test_unknown_battery_stays_normal():
+    # 读不到电量不得擅自降级行为
+    assert power_mode(None, False, "normal") == "normal"
+
+
+def test_enter_saver_at_threshold():
+    assert power_mode(POWER_SAVER_ENTER, False, "normal") == "saver"
+
+
+def test_normal_above_threshold():
+    assert power_mode(POWER_SAVER_ENTER + 1, False, "normal") == "normal"
+
+
+def test_enter_critical_at_threshold():
+    assert power_mode(POWER_CRITICAL_ENTER, False, "saver") == "critical"
+
+
+def test_hysteresis_stays_in_saver():
+    # 已在 saver，电量回升但没到退出线 → 保持，不来回横跳
+    assert power_mode(POWER_SAVER_EXIT - 1, False, "saver") == "saver"
+
+
+def test_hysteresis_exits_saver_at_exit_threshold():
+    assert power_mode(POWER_SAVER_EXIT, False, "saver") == "normal"
+
+
+def test_hysteresis_stays_in_critical():
+    assert power_mode(POWER_CRITICAL_EXIT - 1, False, "critical") == "critical"
+
+
+def test_critical_recovers_to_saver_first():
+    # 从 critical 回升过 critical 退出线，但仍在 saver 区间 → 降一级而非直接正常
+    assert power_mode(POWER_CRITICAL_EXIT, False, "critical") == "saver"
+
+
+# ── 间隔调整 ──
+def test_normal_interval_unchanged():
+    assert power_adjusted_interval("normal", 5.0, False) == 5.0
+    assert power_adjusted_interval("normal", 2.0, True) == 2.0
+
+
+def test_saver_doubles_interval():
+    assert power_adjusted_interval("saver", 10.0, False) == 20.0
+
+
+def test_saver_relaxes_bad_posture_interval():
+    # 坏姿势时正常是 2s 加密，省电模式放宽
+    assert power_adjusted_interval("saver", 2.0, True) == SAVER_BAD_INTERVAL
+
+
+def test_critical_uses_fixed_low_frequency():
+    assert power_adjusted_interval("critical", 2.0, True) == CRITICAL_INTERVAL_SECONDS
+    assert power_adjusted_interval("critical", 10.0, False) == CRITICAL_INTERVAL_SECONDS
