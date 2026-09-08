@@ -2,9 +2,19 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="$PROJECT_DIR/.venv/bin/python"
+# 必须用 Python.app（app bundle 身份）而非 .venv/bin/python：
+# launchd 启动的裸命令行 python 拿不到摄像头 TCC 权限（卡在 TCCAccessRequest）。
+# 包路径由 PYTHONPATH 指向 venv。
+VENV_PY="$PROJECT_DIR/.venv/bin/python"
+PY_PREFIX="$("$VENV_PY" -c 'import sys;print(sys.base_prefix)' 2>/dev/null)"
+PYTHON="$PY_PREFIX/Resources/Python.app/Contents/MacOS/Python"
+[ -x "$PYTHON" ] || PYTHON="$VENV_PY"   # 非 framework 构建时回退
+SITE_PACKAGES="$("$VENV_PY" -c 'import site;print(site.getsitepackages()[0])' 2>/dev/null)"
 SCRIPT="$PROJECT_DIR/sit_monitor.py"
-LOG_DIR="$PROJECT_DIR/logs"
+# 数据目录固定在标准位置：不随项目目录移动，也不会像 brew 版那样
+# 因为存在 Cellar 里被 brew cleanup 连同数据一起删掉
+DATA_DIR="${SITMONITOR_DATA_DIR:-$HOME/Library/Application Support/SitMonitor}"
+LOG_DIR="$DATA_DIR/logs"
 SESSION="sit-monitor"
 TRAY_PID_FILE="$PROJECT_DIR/.tray.pid"
 PLIST_NAME="com.zoubenjia.sit-monitor"
@@ -43,6 +53,8 @@ do_install() {
         -e "s|__PYTHON__|$PYTHON|g" \
         -e "s|__SCRIPT__|$SCRIPT|g" \
         -e "s|__LOG_DIR__|$LOG_DIR|g" \
+        -e "s|__DATA_DIR__|$DATA_DIR|g" \
+        -e "s|__SITE_PACKAGES__|$SITE_PACKAGES|g" \
         "$PLIST_SRC" > "$PLIST_DST"
 
     # 加载 LaunchAgent
@@ -93,7 +105,7 @@ do_start() {
     fi
 
     # 不用 nohup — macOS 上 nohup 会断开 GUI session，导致 rumps 无法显示菜单栏图标
-    "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
+    SITMONITOR_DATA_DIR="$DATA_DIR" PYTHONPATH="$SITE_PACKAGES" "$PYTHON" "$SCRIPT" --tray >> "$LOG_DIR/sit-monitor.log" 2>&1 &
     disown $!
     echo $! > "$TRAY_PID_FILE"
     echo "已启动托盘模式 (PID: $!)"

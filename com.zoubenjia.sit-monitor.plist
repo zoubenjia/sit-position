@@ -12,11 +12,29 @@
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <!-- 崩溃/被杀后自动拉起；配合 tray 的看门狗构成两层自愈 -->
     <key>KeepAlive</key>
-    <false/>
+    <true/>
+    <!-- 只在 GUI 登录会话加载：菜单栏图标需要 Aqua session，
+         否则会在无窗口服务器会话里启动、图标不显示（早期踩过） -->
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+    <!-- 数据目录固定在标准位置，不随项目目录移动或版本升级而丢失
+         （brew 版数据在 Cellar 里，每次重装都会被 cleanup 删掉） -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SITMONITOR_DATA_DIR</key>
+        <string>__DATA_DIR__</string>
+        <!-- 用 Python.app 跑（见 __PYTHON__），它是 app bundle、能独立持有
+             摄像头 TCC 权限；launchd 启动的裸 bin/python3.12 没有 GUI
+             「负责进程」，拿不到相机权限会一直卡在 TCCAccessRequest。
+             因此包路径要靠 PYTHONPATH 指到 venv。 -->
+        <key>PYTHONPATH</key>
+        <string>__SITE_PACKAGES__</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>__LOG_DIR__/sit-monitor.log</string>
     <key>StandardErrorPath</key>
-    <string>__LOG_DIR__/sit-monitor.log</string>
+    <string>__LOG_DIR__/sit-monitor-error.log</string>
 </dict>
 </plist>

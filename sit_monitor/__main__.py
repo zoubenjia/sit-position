@@ -190,13 +190,23 @@ def _warn_if_brew_service_installed():
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if not os.path.exists(os.path.join(here, "pyproject.toml")):
         return
-    plist = os.path.expanduser("~/Library/LaunchAgents/homebrew.mxcl.sit-monitor.plist")
-    if os.path.exists(plist):
-        print("检测到 brew 版自启已安装（homebrew.mxcl.sit-monitor）。")
-        print("从源码再起一个实例会抢占单实例锁、把 brew 版挡在门外。")
-        print("如需管理请用：sit-monitor-service {start|stop}")
-        print("确实要用源码实例，请先 sit-monitor-service stop，或设 SITMONITOR_ALLOW_DUP=1。")
-        sys.exit(1)
+    # 只看"brew 服务是否真的已加载"，不看 plist 文件在不在：
+    # 2026-09 已从 brew 分发迁回源码 LaunchAgent（brew 会改写 wheel 二进制，
+    # 被 macOS AMFI 拒载导致闪退）。brew 包可能仍装着但并未启用，
+    # 那种情况下源码实例才是主力，不该被拦。
+    try:
+        import subprocess
+        loaded = subprocess.run(["launchctl", "list"], capture_output=True,
+                                text=True, timeout=5).stdout
+    except Exception:
+        return
+    if "homebrew.mxcl.sit-monitor" not in loaded:
+        return
+    print("检测到 brew 版服务正在运行（homebrew.mxcl.sit-monitor）。")
+    print("从源码再起一个实例会抢占单实例锁、两边互相挡。")
+    print("请先停掉它：sit-monitor-service stop")
+    print("（或设 SITMONITOR_ALLOW_DUP=1 跳过此检查）")
+    sys.exit(1)
 
 
 def _acquire_lock():
