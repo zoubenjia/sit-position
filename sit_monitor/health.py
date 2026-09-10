@@ -130,3 +130,15 @@ def power_adjusted_interval(mode, normal_interval, bad_active):
     if mode == "saver":
         return SAVER_BAD_INTERVAL if bad_active else normal_interval * 2
     return normal_interval
+
+
+def should_pause_for_lock(screen_locked):
+    """锁屏时是否应暂停监控。
+
+    锁屏是"人不在屏幕前"的确定信号（比 idle 秒数的推测强），
+    此时开摄像头跑推理纯属浪费电与 CPU。
+
+    读不到状态（None）一律不暂停：宁可多测，也不要因为读不到就静默不工作
+    ——静默失效正是此前吃过大亏的地方。
+    """
+    return screen_locked is True

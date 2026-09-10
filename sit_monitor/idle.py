@@ -94,3 +94,19 @@ def read_power_state():
         return pct, ac
     except Exception:
         return None, None
+
+
+def read_screen_locked():
+    """屏幕是否已锁定。True=锁屏, False=未锁, None=读不到（非 mac / 异常）。
+
+    CGSSessionScreenIsLocked 这个键**只在锁屏时存在**，未锁屏时整个键不出现，
+    所以用 get() 取不到即视为未锁屏。纯内存查询，可放心每轮调用。
+    """
+    try:
+        from Quartz import CGSessionCopyCurrentDictionary
+        d = CGSessionCopyCurrentDictionary()
+        if not d:
+            return None
+        return bool(d.get("CGSSessionScreenIsLocked"))
+    except Exception:
+        return None

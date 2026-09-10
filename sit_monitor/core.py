@@ -24,9 +24,10 @@ from sit_monitor.tts import speak
 from sit_monitor.paths import model_path, face_model_path, log_dir, progression_state_path
 from sit_monitor.progression import ProgressionTracker
 from sit_monitor.idle import (read_input_idle_seconds, read_on_ac_power, read_power_state,
-                              deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS)
+                              read_screen_locked, deep_sleep_decision, DEEP_SLEEP_POLL_SECONDS)
 from sit_monitor.health import (camera_failure_action, is_frame_too_dark,
-                                power_mode, power_adjusted_interval)
+                                power_mode, power_adjusted_interval,
+                                should_pause_for_lock)
 
 MODEL_PATH = model_path()
 FACE_MODEL_PATH = face_model_path()
@@ -248,6 +249,8 @@ class PostureMonitor:
         camera_alerted = False     # 本轮相机故障是否已告警（恢复后清零）
         dark_frame_streak = 0      # 连续读到过暗（相机未就绪）帧的次数
         power_state = "normal"     # 电量分级模式：normal/saver/critical
+        screen_locked = False      # 屏幕是否锁定（锁屏期间暂停监控）
+        lock_start = 0.0           # 本次锁屏开始时刻
         last_power_check = 0.0     # 上次读电量的时刻（pmset 是子进程，别每轮都调）
 
         # --- 深度休眠：away 且键鼠长时间空闲时关摄像头、仅轮询键鼠直到唤醒 ---
@@ -270,6 +273,28 @@ class PostureMonitor:
             while self.running:
                 now = time.time()
                 idle_seconds = read_input_idle_seconds()
+
+                # --- 锁屏暂停（最高优先级）---
+                # 锁屏是"人不在屏幕前"的确定信号，比 idle 秒数的推测更强。
+                # 此时释放摄像头、不做任何检测、也不产生统计（避免污染良好率）。
+                locked_now = should_pause_for_lock(read_screen_locked())
+                if locked_now:
+                    if not screen_locked:
+                        screen_locked = True
+                        lock_start = now
+                        log_event(self.event_logger, "screen_locked")
+                        if cap is not None:
+                            cap.release()
+                            cap = None
+                        self._notify_state("stopped")
+                    self._sleep(DEEP_SLEEP_POLL_SECONDS)
+                    continue
+                if screen_locked:
+                    screen_locked = False
+                    log_event(self.event_logger, "screen_unlocked",
+                              duration_s=round(now - lock_start, 1))
+                    # 解锁后重新开始计时，避免把锁屏时长算进"坐了多久"
+                    last_check_time = 0
 
                 # --- 深度休眠处理（在开摄像头之前）---
                 if deep_sleep:
