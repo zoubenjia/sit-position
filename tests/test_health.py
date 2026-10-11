@@ -45,8 +45,9 @@ def test_watchdog_ok_when_no_data_yet():
 
 
 def test_watchdog_gives_up_after_max_restarts():
-    # 反复重启仍不好转 → 停止重启，只告警，避免无限重启循环
-    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 60, WATCHDOG_MAX_RESTARTS) == "give_up"
+    # 线程重启无效、且进程刚重启过（不能再重启进程）→ 只告警，避免无限重启循环
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 60, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=60.0) == "give_up"
 
 
 def test_watchdog_still_restarts_below_max():
@@ -90,12 +91,14 @@ def test_watchdog_retries_after_cooldown():
     """2026-08-15 实测缺口：相机 10:05 故障，看门狗快速重启 3 次后 give_up，
     但相机 10 分钟后就恢复了，监控却一直躺到 13:15 人工干预。
     达到重启上限后应转为长间隔重试，而不是永久放弃。"""
-    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS, WATCHDOG_MAX_RESTARTS) == "restart"
+    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=60.0) == "restart"
 
 
 def test_watchdog_still_gives_up_within_cooldown():
     # 冷却期内不重启，避免快速重启循环
-    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS - 1, WATCHDOG_MAX_RESTARTS) == "give_up"
+    assert watchdog_action(True, WATCHDOG_COOLDOWN_SECONDS - 1, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=60.0) == "give_up"
 
 
 # ── 电量分级策略（带滞回，防阈值附近抖动）──
@@ -184,3 +187,37 @@ def test_watchdog_still_restarts_when_not_paused():
 def test_watchdog_paused_defaults_false():
     # 不传 paused 时保持原行为（向后兼容）
     assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, 0) == "restart"
+
+
+# ── 线程重启无效时升级为重启进程（2026-10-11 实测缺口）──
+from sit_monitor.health import PROCESS_RESTART_MIN_INTERVAL
+
+
+def test_escalate_to_process_restart():
+    """实测缺口：相机状态坏在进程级，重启监控线程无效（连重 4 轮仍 camera_error），
+    而重启整个进程立刻就好。看门狗此前只能重启线程，只好干等人工介入。"""
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=None) == "restart_process"
+
+
+def test_no_process_restart_storm():
+    # 刚重启过进程就别再重启，否则变成重启风暴
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=60.0) == "give_up"
+
+
+def test_process_restart_allowed_after_min_interval():
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, WATCHDOG_MAX_RESTARTS,
+                           seconds_since_process_restart=PROCESS_RESTART_MIN_INTERVAL) == "restart_process"
+
+
+def test_thread_restart_still_first():
+    # 没到线程重启上限时，仍优先重启线程（代价小得多）
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, 0,
+                           seconds_since_process_restart=None) == "restart"
+
+
+def test_paused_beats_process_restart():
+    # 暂停态优先：锁屏时绝不能升级到重启进程
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 999, WATCHDOG_MAX_RESTARTS,
+                           paused=True, seconds_since_process_restart=None) == "ok"

@@ -406,6 +406,29 @@ class TrayApp(rumps.App):
                            t(f"tray.notify.{key}_title"),
                            t(f"tray.notify.{key}_msg", battery=battery))
 
+    def _process_restart_stamp(self):
+        from sit_monitor.paths import log_dir
+        return os.path.join(log_dir(), "last_process_restart")
+
+    def _since_process_restart(self):
+        """距上次由看门狗重启整个进程的秒数；从未重启过返回 None。
+
+        必须持久化到文件：进程重启后内存计数全部归零，只有落盘的时间戳
+        才能拦住"故障持续 → 反复重启进程"的风暴。
+        """
+        try:
+            with open(self._process_restart_stamp()) as f:
+                return max(0.0, time.time() - float(f.read().strip()))
+        except Exception:
+            return None
+
+    def _mark_process_restart(self):
+        try:
+            with open(self._process_restart_stamp(), "w") as f:
+                f.write(str(time.time()))
+        except Exception:
+            log.exception("failed to record process restart timestamp")
+
     def _check_health(self):
         """健康自检（主线程）：相机故障告警 + 监控僵死自愈。
 
@@ -427,7 +450,8 @@ class TrayApp(rumps.App):
         # 每 15 分钟重启一次，还会反复开关相机加剧 CMIO 故障。
         paused = bool(getattr(self.monitor, "paused_reason", None))
         action = watchdog_action(self._is_running(), since, self._watchdog_restarts,
-                                 paused=paused)
+                                 paused=paused,
+                                 seconds_since_process_restart=self._since_process_restart())
         if paused:
             # 暂停期间持续刷新心跳基准，解除暂停后不会立刻被判超时
             self._last_event_ts = time.time()
@@ -444,6 +468,15 @@ class TrayApp(rumps.App):
                 self._start_monitor()
             except Exception:
                 log.exception("watchdog restart failed")
+        elif action == "restart_process":
+            # 线程重启救不回来的故障（相机状态坏在进程级）只能整进程重启；
+            # launchd 的 KeepAlive 会把我们拉起来。
+            log.warning("watchdog: thread restarts ineffective, restarting process")
+            self._mark_process_restart()
+            rumps.notification("Sit Monitor", t("tray.notify.watchdog_proc_title"),
+                               t("tray.notify.watchdog_proc_msg"))
+            time.sleep(1)          # 给通知一点时间送达
+            os._exit(1)            # 非 0 退出，交由 launchd KeepAlive 重启
         elif action == "give_up":
             # 冷却期内：不重启也不刷计数，只在进入冷却时告警一次。
             # （冷却期满 watchdog_action 会重新返回 restart，故障恢复后能自愈）

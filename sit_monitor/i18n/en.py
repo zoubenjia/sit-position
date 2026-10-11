@@ -155,6 +155,8 @@ STRINGS: dict[str, str] = {
     "tray.notify.camera_error_msg": "Monitoring paused. Check System Settings -> Privacy & Security -> Camera",
     "tray.notify.watchdog_title": "Monitoring auto-restarted",
     "tray.notify.watchdog_msg": "No detection for {seconds}s, recovered automatically",
+    "tray.notify.watchdog_proc_title": "\U0001f501 Restarting app",
+    "tray.notify.watchdog_proc_msg": "Thread restarts ineffective; restarting the whole app to recover",
     "tray.notify.watchdog_failed_title": "\u26a0\ufe0f Monitoring cannot recover",
     "tray.notify.watchdog_failed_msg": "Auto-restart failed repeatedly. Check camera and permissions",
     "tray.notify.power_saver_title": "\U0001f50b Power saver on",

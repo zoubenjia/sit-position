@@ -155,6 +155,8 @@ STRINGS: dict[str, str] = {
     "tray.notify.camera_error_msg": "监控已暂停。请检查 系统设置 → 隐私与安全性 → 摄像头 是否允许本程序",
     "tray.notify.watchdog_title": "监控已自动重启",
     "tray.notify.watchdog_msg": "检测停滞 {seconds} 秒，已自动恢复",
+    "tray.notify.watchdog_proc_title": "🔁 正在重启程序",
+    "tray.notify.watchdog_proc_msg": "监控线程多次重启无效，重启整个程序以恢复",
     "tray.notify.watchdog_failed_title": "⚠️ 监控无法恢复",
     "tray.notify.watchdog_failed_msg": "多次自动重启无效，请手动检查摄像头与权限",
     "tray.notify.power_saver_title": "🔋 已进入省电模式",

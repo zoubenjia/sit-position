@@ -15,6 +15,7 @@ CAMERA_FAIL_ALERT_THRESHOLD = 3    # 连续打不开几次才告警（避免瞬�
 WATCHDOG_STALE_SECONDS = 180.0     # 监控在跑却这么久没有新检测事件 = 僵死
 WATCHDOG_MAX_RESTARTS = 3          # 快速重启上限，超过转入冷却期
 WATCHDOG_COOLDOWN_SECONDS = 900.0  # 冷却期：放弃快速重启后每 15 分钟再试一次
+PROCESS_RESTART_MIN_INTERVAL = 1800.0  # 两次"重启整个进程"至少间隔 30 分钟，防重启风暴
 
 
 def camera_failure_action(consecutive_failures, already_alerted):
@@ -33,7 +34,7 @@ def camera_failure_action(consecutive_failures, already_alerted):
 
 
 def watchdog_action(monitor_running, seconds_since_last_event, restart_count,
-                    paused=False):
+                    paused=False, seconds_since_process_restart=None):
     """监控僵死自愈决策。
 
     monitor_running:          监控是否**应当**在运行（用户没主动停止）
@@ -41,7 +42,11 @@ def watchdog_action(monitor_running, seconds_since_last_event, restart_count,
     seconds_since_last_event: 距上次检测事件的秒数；None＝还没有任何事件
     restart_count:            本轮已连续自动重启的次数
 
-    返回 "ok"（正常）/ "restart"（自动重启监控）/ "give_up"（放弃重启，只告警）。
+    seconds_since_process_restart: 距上次重启整个进程的秒数；None＝从未重启过
+
+    返回 "ok"（正常）/ "restart"（重启监控线程）/
+    "restart_process"（线程重启无效，升级为重启整个进程）/
+    "give_up"（冷却期内不动，只告警）。
     """
     if not monitor_running:
         return "ok"   # 用户主动停止的，不得擅自重启
@@ -58,6 +63,14 @@ def watchdog_action(monitor_running, seconds_since_last_event, restart_count,
     if seconds_since_last_event < WATCHDOG_STALE_SECONDS:
         return "ok"
     if restart_count >= WATCHDOG_MAX_RESTARTS:
+        # 线程重启已无效 → 升级为重启整个进程。
+        # 实测 2026-10-11：相机状态坏在进程级，连重 4 轮监控线程仍 camera_error
+        # （全天仅 6 次有效检测），而重启整个进程立刻恢复。
+        # launchd 的 KeepAlive 会把进程拉起来，代价很低。
+        # 但必须限频，否则故障持续时会变成进程重启风暴。
+        if (seconds_since_process_restart is None
+                or seconds_since_process_restart >= PROCESS_RESTART_MIN_INTERVAL):
+            return "restart_process"
         # 不能永久躺平：故障（如相机被占）往往几分钟后自行恢复。
         # 实测 2026-08-15：快速重启 3 次后放弃，相机 10 分钟后就好了，
         # 监控却一直停到 3 小时后人工干预。改为冷却期后继续低频重试。
