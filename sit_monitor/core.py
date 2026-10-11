@@ -90,6 +90,9 @@ class PostureMonitor:
         # 电量分级模式，由主循环更新、tray 轮询读取（不走 on_state_change，
         # 那是姿势状态通道，混用会把菜单栏图标顶掉）
         self.power_state = "normal"
+        # 预期暂停的原因（"lock"/"deep_sleep"/None）。tray 的看门狗据此
+        # 区分"故意不检测"与"僵死"，否则暂停期会被反复误重启。
+        self.paused_reason = None
 
     def _notify_state(self, state, **details):
         if self.on_state_change:
@@ -194,37 +197,59 @@ class PostureMonitor:
         log_event(self.logger, "start", thresholds=thresholds, sit_max_minutes=s.sit_max_minutes)
 
         # MediaPipe 初始化
-        base_options = mp.tasks.BaseOptions(model_asset_path=MODEL_PATH)
-        options = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=base_options,
-            running_mode=mp.tasks.vision.RunningMode.IMAGE,
-            min_pose_detection_confidence=0.5,
-            min_pose_presence_confidence=0.5,
-            min_tracking_confidence=0.5,
-            num_poses=1,
-        )
-        landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
+        # 检测器（PoseLandmarker / FaceLandmarker）做成可重建：锁屏、深度休眠
+        # 期间会主动 close() 释放其工作内存（mediapipe 单模型常驻数十 MB），
+        # 唤醒后到检测时刻再按需重建。库代码段是共享 dylib 无法卸载，这里只回收模型 buffer。
+        _face_enabled = os.path.exists(FACE_MODEL_PATH)
 
-        # FaceLandmarker 初始化（人脸验证 + 疲劳检测）
-        face_landmarker = None
+        def _build_landmarkers():
+            base_options = mp.tasks.BaseOptions(model_asset_path=MODEL_PATH)
+            options = mp.tasks.vision.PoseLandmarkerOptions(
+                base_options=base_options,
+                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                min_pose_detection_confidence=0.5,
+                min_pose_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
+                num_poses=1,
+            )
+            pose = mp.tasks.vision.PoseLandmarker.create_from_options(options)
+            face = None
+            if _face_enabled:
+                face_base = mp.tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH)
+                face_options = mp.tasks.vision.FaceLandmarkerOptions(
+                    base_options=face_base,
+                    running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                    min_face_detection_confidence=0.5,
+                    min_face_presence_confidence=0.5,
+                    num_faces=1,
+                )
+                face = mp.tasks.vision.FaceLandmarker.create_from_options(face_options)
+            return pose, face
+
+        def _release_landmarkers():
+            """close 掉检测器并置 None（幂等）。锁屏/休眠进入时调用，回收模型内存。"""
+            nonlocal landmarker, face_landmarker
+            for _m in (landmarker, face_landmarker):
+                if _m is not None:
+                    try:
+                        _m.close()
+                    except Exception:
+                        pass
+            landmarker = None
+            face_landmarker = None
+
+        landmarker, face_landmarker = _build_landmarkers()
+
+        # FatigueTracker 只随进程初始化一次，不随锁屏拆卸（仅持有滑动窗口 deque，
+        # 内存极小；blink/yawn 计数跨锁屏无需保留，唤醒后自然重新累积）。
         fatigue_tracker = None
         last_fatigue_notify_time = 0
-        if os.path.exists(FACE_MODEL_PATH):
-            face_base = mp.tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH)
-            face_options = mp.tasks.vision.FaceLandmarkerOptions(
-                base_options=face_base,
-                running_mode=mp.tasks.vision.RunningMode.IMAGE,
-                min_face_detection_confidence=0.5,
-                min_face_presence_confidence=0.5,
-                num_faces=1,
+        if _face_enabled and s.fatigue_enabled:
+            from sit_monitor.fatigue import FatigueTracker
+            fatigue_tracker = FatigueTracker(
+                ear_threshold=s.ear_threshold,
+                mar_threshold=s.mar_threshold,
             )
-            face_landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(face_options)
-            if s.fatigue_enabled:
-                from sit_monitor.fatigue import FatigueTracker
-                fatigue_tracker = FatigueTracker(
-                    ear_threshold=s.ear_threshold,
-                    mar_threshold=s.mar_threshold,
-                )
 
         bad_start_time = None
         good_streak = 0  # 连续 good 帧计数，用于防抖
@@ -279,6 +304,7 @@ class PostureMonitor:
                 # 此时释放摄像头、不做任何检测、也不产生统计（避免污染良好率）。
                 locked_now = should_pause_for_lock(read_screen_locked())
                 if locked_now:
+                    self.paused_reason = "lock"
                     if not screen_locked:
                         screen_locked = True
                         lock_start = now
@@ -286,11 +312,16 @@ class PostureMonitor:
                         if cap is not None:
                             cap.release()
                             cap = None
+                        # 锁屏即停止检测：连摄像头带 mediapipe 检测器一起释放，
+                        # 解锁后到检测时刻自动重建。锁屏往往持续数十分钟到数小时，
+                        # 这段时间不该让模型 buffer 白占内存。
+                        _release_landmarkers()
                         self._notify_state("stopped")
                     self._sleep(DEEP_SLEEP_POLL_SECONDS)
                     continue
                 if screen_locked:
                     screen_locked = False
+                    self.paused_reason = None
                     log_event(self.event_logger, "screen_unlocked",
                               duration_s=round(now - lock_start, 1))
                     # 解锁后重新开始计时，避免把锁屏时长算进"坐了多久"
@@ -300,10 +331,12 @@ class PostureMonitor:
                 if deep_sleep:
                     action = deep_sleep_decision(True, currently_away, idle_seconds)
                     if action == "stay_sleep":
+                        self.paused_reason = "deep_sleep"
                         self._sleep(DEEP_SLEEP_POLL_SECONDS)
                         continue
                     # action == "wake"：退出休眠，落到下方正常检测路径（会重开摄像头）
                     deep_sleep = False
+                    self.paused_reason = None
                     log_event(self.event_logger, "deep_sleep_exit",
                               duration_s=round(now - deep_sleep_start, 1))
 
@@ -357,6 +390,10 @@ class PostureMonitor:
                             cap = None
                         self._sleep(min(wait, 1.0))
                     continue
+
+                # --- 到检测时刻：确保检测器已就绪（锁屏/休眠期间被释放过）---
+                if landmarker is None:
+                    landmarker, face_landmarker = _build_landmarkers()
 
                 # --- 到检测时刻：确保摄像头已开启 ---
                 if cap is None or not cap.isOpened():
@@ -477,6 +514,8 @@ class PostureMonitor:
                         if cap is not None:
                             cap.release()
                             cap = None
+                        # 深度休眠同样释放检测器，回收模型内存（唤醒后按需重建）
+                        _release_landmarkers()
                     self.stats.record("away", now)
                     if self.settings.progressive_enabled:
                         from datetime import date
@@ -766,8 +805,10 @@ class PostureMonitor:
             print(summary)
             print("=" * 40)
 
-            landmarker.close()
-            if face_landmarker:
+            # landmarker 可能已在锁屏/休眠时被释放为 None，需判空
+            if landmarker is not None:
+                landmarker.close()
+            if face_landmarker is not None:
                 face_landmarker.close()
             if cap is not None:
                 cap.release()

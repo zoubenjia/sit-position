@@ -165,3 +165,22 @@ def test_saver_relaxes_bad_posture_interval():
 def test_critical_uses_fixed_low_frequency():
     assert power_adjusted_interval("critical", 2.0, True) == CRITICAL_INTERVAL_SECONDS
     assert power_adjusted_interval("critical", 10.0, False) == CRITICAL_INTERVAL_SECONDS
+
+
+# ── 暂停态不得被看门狗误判为僵死（2026-10-11 实测缺陷）──
+def test_watchdog_ignores_paused_monitor():
+    """锁屏/深度休眠期间主循环故意不产生检测事件，看门狗必须认得这是
+    预期暂停而非僵死。此前误判导致：夜间长锁屏时每 15 分钟重启一次监控
+    （单次锁屏窗口内重复记录 screen_locked 达 83 次），每次重启都重新
+    初始化 MediaPipe 并尝试开相机，反复开关相机还会加剧 CMIO 故障。"""
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 999, 0, paused=True) == "ok"
+
+
+def test_watchdog_still_restarts_when_not_paused():
+    # 非暂停态的僵死照常重启，不能因为加了 paused 参数就失效
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, 0, paused=False) == "restart"
+
+
+def test_watchdog_paused_defaults_false():
+    # 不传 paused 时保持原行为（向后兼容）
+    assert watchdog_action(True, WATCHDOG_STALE_SECONDS + 1, 0) == "restart"

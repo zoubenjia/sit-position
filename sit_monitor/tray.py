@@ -423,7 +423,14 @@ class TrayApp(rumps.App):
         since = None
         if self._last_event_ts is not None:
             since = time.time() - self._last_event_ts
-        action = watchdog_action(self._is_running(), since, self._watchdog_restarts)
+        # 锁屏/深度休眠是预期暂停，不能当僵死重启——否则夜间长锁屏会被
+        # 每 15 分钟重启一次，还会反复开关相机加剧 CMIO 故障。
+        paused = bool(getattr(self.monitor, "paused_reason", None))
+        action = watchdog_action(self._is_running(), since, self._watchdog_restarts,
+                                 paused=paused)
+        if paused:
+            # 暂停期间持续刷新心跳基准，解除暂停后不会立刻被判超时
+            self._last_event_ts = time.time()
         if action == "restart":
             self._watchdog_restarts += 1
             self._watchdog_gave_up = False

@@ -32,10 +32,12 @@ def camera_failure_action(consecutive_failures, already_alerted):
     return "none"
 
 
-def watchdog_action(monitor_running, seconds_since_last_event, restart_count):
+def watchdog_action(monitor_running, seconds_since_last_event, restart_count,
+                    paused=False):
     """监控僵死自愈决策。
 
     monitor_running:          监控是否**应当**在运行（用户没主动停止）
+    paused:                   是否处于预期暂停（锁屏/深度休眠），暂停不算僵死
     seconds_since_last_event: 距上次检测事件的秒数；None＝还没有任何事件
     restart_count:            本轮已连续自动重启的次数
 
@@ -43,6 +45,14 @@ def watchdog_action(monitor_running, seconds_since_last_event, restart_count):
     """
     if not monitor_running:
         return "ok"   # 用户主动停止的，不得擅自重启
+    if paused:
+        # 锁屏/深度休眠期间主循环故意不产生检测事件，这是预期状态而非僵死。
+        # 实测 2026-10-11：没有这一条时，夜间长锁屏会被判为僵死 →
+        # 每 180s 重启监控、3 次后转入每 15 分钟的冷却重试，无限循环
+        # （单次锁屏窗口内 screen_locked 被重复记录 83 次）；
+        # 每次重启都重新初始化 MediaPipe 并尝试开相机（锁屏时相机本就不可用），
+        # 反复开关相机还会加剧 CMIO 故障。
+        return "ok"
     if seconds_since_last_event is None:
         return "ok"   # 刚启动还没数据，不算僵死
     if seconds_since_last_event < WATCHDOG_STALE_SECONDS:
